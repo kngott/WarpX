@@ -116,6 +116,9 @@ public:
     static bool do_dynamic_scheduling;
     static bool refine_plasma;
 
+    static bool exchanged_guards_E;
+    static bool exchanged_guards_B;
+  
     static int sort_int;
 
     // buffers

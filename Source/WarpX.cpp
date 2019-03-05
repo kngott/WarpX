@@ -56,6 +56,9 @@ bool WarpX::refine_plasma     = false;
 
 int WarpX::num_mirrors = 0;
 
+bool WarpX::exchanged_guards_E = true;
+bool WarpX::exchanged_guards_B = true;
+
 int  WarpX::sort_int = -1;
 
 bool WarpX::do_boosted_frame_diagnostic = false;
