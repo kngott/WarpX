@@ -305,6 +305,78 @@ contains
 
   end subroutine warpx_push_pml_evec_3d
 
+  subroutine warpx_push_pml_evec_3d_withpart (xlo, xhi, ylo, yhi, zlo, zhi, &
+       &                             Ex, Exlo, Exhi, &
+       &                             Ey, Eylo, Eyhi, &
+       &                             Ez, Ezlo, Ezhi, &
+       &                             Bx, Bxlo, Bxhi, &
+       &                             By, Bylo, Byhi, &
+       &                             Bz, Bzlo, Bzhi, &
+       &                             Jx, Jxlo, Jxhi, &
+       &                             Jy, Jylo, Jyhi, &
+       &                             Jz, Jzlo, Jzhi, &
+       &                             mudt, dtsdx, dtsdy, dtsdz) &
+       bind(c,name='warpx_push_pml_evec_3d_withpart')
+    integer, intent(in) :: xlo(3), xhi(3), ylo(3), yhi(3), zlo(3), zhi(3), &
+         Exlo(3), Exhi(3), Eylo(3), Eyhi(3), Ezlo(3), Ezhi(3), &
+         Jxlo(3), Jxhi(3), Jylo(3), Jyhi(3), Jzlo(3), Jzhi(3), &
+         Bxlo(3), Bxhi(3), Bylo(3), Byhi(3), Bzlo(3), Bzhi(3)
+    real(amrex_real), intent(in) :: mudt, dtsdx, dtsdy, dtsdz
+    real(amrex_real), intent(inout) :: Ex (Exlo(1):Exhi(1),Exlo(2):Exhi(2),Exlo(3):Exhi(3),2)
+    real(amrex_real), intent(inout) :: Ey (Eylo(1):Eyhi(1),Eylo(2):Eyhi(2),Eylo(3):Eyhi(3),2)
+    real(amrex_real), intent(inout) :: Ez (Ezlo(1):Ezhi(1),Ezlo(2):Ezhi(2),Ezlo(3):Ezhi(3),2)
+    real(amrex_real), intent(in   ) :: Bx (Bxlo(1):Bxhi(1),Bxlo(2):Bxhi(2),Bxlo(3):Bxhi(3),2)
+    real(amrex_real), intent(in   ) :: By (Bylo(1):Byhi(1),Bylo(2):Byhi(2),Bylo(3):Byhi(3),2)
+    real(amrex_real), intent(in   ) :: Bz (Bzlo(1):Bzhi(1),Bzlo(2):Bzhi(2),Bzlo(3):Bzhi(3),2)
+    real(amrex_real), intent(in   ) :: Jx (Jxlo(1):Jxhi(1),Jxlo(2):Jxhi(2),Jxlo(3):Jxhi(3))
+    real(amrex_real), intent(in   ) :: Jy (Jylo(1):Jyhi(1),Jylo(2):Jyhi(2),Jylo(3):Jyhi(3))
+    real(amrex_real), intent(in   ) :: Jz (Jzlo(1):Jzhi(1),Jzlo(2):Jzhi(2),Jzlo(3):Jzhi(3))
+
+    real(amrex_real), parameter :: half = 1.d0/2.d0
+
+    integer :: i, j, k
+
+    do       k = xlo(3), xhi(3)
+       do    j = xlo(2), xhi(2)
+          do i = xlo(1), xhi(1)
+             Ex(i,j,k,1) = Ex(i,j,k,1) + dtsdy*(Bz(i,j  ,k  ,1)+Bz(i,j  ,k  ,2)  &
+                  &                            -Bz(i,j-1,k  ,1)-Bz(i,j-1,k  ,2)) &
+                  &                    - mudt * Jx(i,j,k) * half
+             Ex(i,j,k,2) = Ex(i,j,k,2) - dtsdz*(By(i,j  ,k  ,1)+By(i,j  ,k  ,2)  &
+                  &                            -By(i,j  ,k-1,1)-By(i,j  ,k-1,2)) &
+                  &                    - mudt * Jx(i,j,k) * half
+          end do
+       end do
+    end do
+
+    do       k = ylo(3), yhi(3)
+       do    j = ylo(2), yhi(2)
+          do i = ylo(1), yhi(1)
+             Ey(i,j,k,1) = Ey(i,j,k,1) + dtsdz*(Bx(i  ,j,k  ,1)+Bx(i  ,j,k  ,2)  &
+                  &                            -Bx(i  ,j,k-1,1)-Bx(i  ,j,k-1,2)) &
+                  &                    - mudt * Jy(i,j,k) * half
+             Ey(i,j,k,2) = Ey(i,j,k,2) - dtsdx*(Bz(i  ,j,k  ,1)+Bz(i  ,j,k  ,2)  &
+                  &                            -Bz(i-1,j,k  ,1)-Bz(i-1,j,k  ,2)) &
+                  &                    - mudt * Jy(i,j,k) * half
+          end do
+       end do
+    end do
+
+    do       k = zlo(3), zhi(3)
+       do    j = zlo(2), zhi(2)
+          do i = zlo(1), zhi(1)
+             Ez(i,j,k,1) = Ez(i,j,k,1) + dtsdx*(By(i  ,j  ,k,1)+By(i  ,j  ,k,2)  &
+                  &                            -By(i-1,j  ,k,1)-By(i-1,j  ,k,2)) &
+                  &                    - mudt * Jz(i,j,k) * half
+             Ez(i,j,k,2) = Ez(i,j,k,2) - dtsdy*(Bx(i  ,j  ,k,1)+Bx(i  ,j  ,k,2)  &
+                  &                            -Bx(i  ,j-1,k,1)-Bx(i  ,j-1,k,2)) &
+                  &                    - mudt * Jz(i,j,k) * half
+          end do
+       end do
+    end do
+
+  end subroutine warpx_push_pml_evec_3d_withpart
+
   subroutine warpx_push_pml_bvec_2d (xlo, xhi, ylo, yhi, zlo, zhi, &
        &                             Ex, Exlo, Exhi, &
        &                             Ey, Eylo, Eyhi, &
@@ -471,6 +543,65 @@ contains
 
   end subroutine warpx_push_pml_evec_2d
 
+  subroutine warpx_push_pml_evec_2d_withpart (xlo, xhi, ylo, yhi, zlo, zhi, &
+       &                             Ex, Exlo, Exhi, &
+       &                             Ey, Eylo, Eyhi, &
+       &                             Ez, Ezlo, Ezhi, &
+       &                             Bx, Bxlo, Bxhi, &
+       &                             By, Bylo, Byhi, &
+       &                             Bz, Bzlo, Bzhi, &
+       &                             Jx, Jxlo, Jxhi, &
+       &                             Jy, Jylo, Jyhi, &
+       &                             Jz, Jzlo, Jzhi, &
+       &                             mudt, dtsdx, dtsdy, dtsdz) &
+       bind(c,name='warpx_push_pml_evec_2d_withpart')
+    integer, intent(in) :: xlo(2), xhi(2), ylo(2), yhi(2), zlo(2), zhi(2), &
+         Exlo(2), Exhi(2), Eylo(2), Eyhi(2), Ezlo(2), Ezhi(2), &
+         Jxlo(2), Jxhi(2), Jylo(2), Jyhi(2), Jzlo(2), Jzhi(2), &
+         Bxlo(2), Bxhi(2), Bylo(2), Byhi(2), Bzlo(2), Bzhi(2)
+    real(amrex_real), intent(in) :: mudt, dtsdx, dtsdy, dtsdz
+    real(amrex_real), intent(inout) :: Ex (Exlo(1):Exhi(1),Exlo(2):Exhi(2),2)
+    real(amrex_real), intent(inout) :: Ey (Eylo(1):Eyhi(1),Eylo(2):Eyhi(2),2)
+    real(amrex_real), intent(inout) :: Ez (Ezlo(1):Ezhi(1),Ezlo(2):Ezhi(2),2)
+    real(amrex_real), intent(in   ) :: Bx (Bxlo(1):Bxhi(1),Bxlo(2):Bxhi(2),2)
+    real(amrex_real), intent(in   ) :: By (Bylo(1):Byhi(1),Bylo(2):Byhi(2),2)
+    real(amrex_real), intent(in   ) :: Bz (Bzlo(1):Bzhi(1),Bzlo(2):Bzhi(2),2)
+    real(amrex_real), intent(inout) :: Jx (Jxlo(1):Jxhi(1),Jxlo(2):Jxhi(2))
+    real(amrex_real), intent(inout) :: Jy (Jylo(1):Jyhi(1),Jylo(2):Jyhi(2))
+    real(amrex_real), intent(inout) :: Jz (Jzlo(1):Jzhi(1),Jzlo(2):Jzhi(2))
+
+    real(amrex_real), parameter :: half = 1.d0/2.d0
+
+    integer :: i, k
+
+    do    k = xlo(2), xhi(2)
+       do i = xlo(1), xhi(1)
+          Ex(i,k,2) = Ex(i,k,2) - dtsdz*(By(i,k  ,1)+By(i,k  ,2)  &
+               &                        -By(i,k-1,1)-By(i,k-1,2)) &
+               &                - mudt * Jx(i,k)
+       end do
+    end do
+
+    do    k = ylo(2), yhi(2)
+       do i = ylo(1), yhi(1)
+          Ey(i,k,1) = Ey(i,k,1) + dtsdz*(Bx(i  ,k  ,1)+Bx(i  ,k  ,2)  &
+               &                        -Bx(i  ,k-1,1)-Bx(i  ,k-1,2)) &
+               &                - mudt * jy(i,k) * half
+          Ey(i,k,2) = Ey(i,k,2) - dtsdx*(Bz(i  ,k  ,1)+Bz(i  ,k  ,2)  &
+               &                        -Bz(i-1,k  ,1)-Bz(i-1,k  ,2)) &
+               &                - mudt * Jy(i,k) * half
+       end do
+    end do
+
+    do    k = zlo(2), zhi(2)
+       do i = zlo(1), zhi(1)
+          Ez(i,k,1) = Ez(i,k,1) + dtsdx*(By(i  ,k,1)+By(i  ,k,2)  &
+               &                        -By(i-1,k,1)-By(i-1,k,2)) &
+               &                - mudt * Jz(i,k)
+       end do
+    end do
+
+  end subroutine warpx_push_pml_evec_2d_withpart
 
   subroutine warpx_push_pml_f_3d (lo, hi, &
        &                          f ,  flo,  fhi, &
@@ -506,6 +637,47 @@ contains
     end do
   end subroutine warpx_push_pml_f_3d
 
+  subroutine warpx_push_pml_f_3d_withpart (lo, hi, &
+       &                          f ,  flo,  fhi, &
+       &                          Ex, Exlo, Exhi, &
+       &                          Ey, Eylo, Eyhi, &
+       &                          Ez, Ezlo, Ezhi, &
+       &                          rho ,  rholo,  rhohi, &
+       &                          mudt, dtdx, dtdy, dtdz) &
+       bind(c,name='warpx_push_pml_f_3d_withpart')
+    integer, intent(in) :: lo(3), hi(3), Exlo(3), Exhi(3), Eylo(3), Eyhi(3), Ezlo(3), Ezhi(3), &
+         flo(3), fhi(3), rholo(3), rhohi(3)
+    real(amrex_real), intent(inout) :: f  ( flo(1): fhi(1), flo(2): fhi(2), flo(3): fhi(3),3)
+    real(amrex_real), intent(in   ) :: Ex (Exlo(1):Exhi(1),Exlo(2):Exhi(2),Exlo(3):Exhi(3),3)
+    real(amrex_real), intent(in   ) :: Ey (Eylo(1):Eyhi(1),Eylo(2):Eyhi(2),Eylo(3):Eyhi(3),3)
+    real(amrex_real), intent(in   ) :: Ez (Ezlo(1):Ezhi(1),Ezlo(2):Ezhi(2),Ezlo(3):Ezhi(3),3)
+    real(amrex_real), intent(in   ) :: rho (Ezlo(1):Ezhi(1),Ezlo(2):Ezhi(2),Ezlo(3):Ezhi(3))
+    real(amrex_real), intent(in) :: mudt, dtdx, dtdy, dtdz
+
+    real(amrex_real), parameter :: third = 1.d0/3.d0
+
+    integer :: i, j, k
+
+    do       k = lo(3), hi(3)
+       do    j = lo(2), hi(2)
+          do i = lo(1), hi(1)
+             f(i,j,k,1) = f(i,j,k,1) + dtdx*((Ex(i,j,k,1)-Ex(i-1,j,k,1))  &
+                  &                        + (Ex(i,j,k,2)-Ex(i-1,j,k,2))  &
+                  &                        + (Ex(i,j,k,3)-Ex(i-1,j,k,3))) &
+                  &                  - mudt*  rho(i,j,k) * third
+             f(i,j,k,2) = f(i,j,k,2) + dtdy*((Ey(i,j,k,1)-Ey(i,j-1,k,1))  &
+                  &                        + (Ey(i,j,k,2)-Ey(i,j-1,k,2))  &
+                  &                        + (Ey(i,j,k,3)-Ey(i,j-1,k,3))) &
+                  &                  - mudt*  rho(i,j,k) * third
+             f(i,j,k,3) = f(i,j,k,3) + dtdz*((Ez(i,j,k,1)-Ez(i,j,k-1,1))  &
+                  &                        + (Ez(i,j,k,2)-Ez(i,j,k-1,2))  &
+                  &                        + (Ez(i,j,k,3)-Ez(i,j,k-1,3))) &
+                  &                  - mudt*  rho(i,j,k) * third
+          end do
+       end do
+    end do
+  end subroutine warpx_push_pml_f_3d_withpart
+
   subroutine warpx_push_pml_f_2d (lo, hi, &
        &                          f ,  flo,  fhi, &
        &                          Ex, Exlo, Exhi, &
@@ -534,6 +706,41 @@ contains
        end do
     end do
   end subroutine warpx_push_pml_f_2d
+
+  subroutine warpx_push_pml_f_2d_withpart (lo, hi, &
+       &                          f ,  flo,  fhi, &
+       &                          Ex, Exlo, Exhi, &
+       &                          Ey, Eylo, Eyhi, &
+       &                          Ez, Ezlo, Ezhi, &
+       &                          rho ,  rholo,  rhohi, &
+       &                          mudt, dtdx, dtdy, dtdz) &
+       bind(c,name='warpx_push_pml_f_2d_withpart')
+    integer, intent(in) :: lo(2), hi(2), Exlo(2), Exhi(2), Eylo(2), Eyhi(2), Ezlo(2), Ezhi(2), &
+         flo(2), fhi(2), rholo(2), rhohi(2)
+    real(amrex_real), intent(inout) :: f  ( flo(1): fhi(1), flo(2): fhi(2),3)
+    real(amrex_real), intent(in   ) :: Ex (Exlo(1):Exhi(1),Exlo(2):Exhi(2),3)
+    real(amrex_real), intent(in   ) :: Ey (Eylo(1):Eyhi(1),Eylo(2):Eyhi(2),3)
+    real(amrex_real), intent(in   ) :: Ez (Ezlo(1):Ezhi(1),Ezlo(2):Ezhi(2),3)
+    real(amrex_real), intent(in   ) :: rho (Ezlo(1):Ezhi(1),Ezlo(2):Ezhi(2))
+    real(amrex_real), intent(in) :: mudt, dtdx, dtdy, dtdz
+
+    real(amrex_real), parameter :: half = 1.d0/2.d0
+
+    integer :: i, k
+
+    do    k = lo(2), hi(2)
+       do i = lo(1), hi(1)
+          f(i,k,1) = f(i,k,1) + dtdx*((Ex(i,k,1)-Ex(i-1,k,1))  &
+               &                    + (Ex(i,k,2)-Ex(i-1,k,2))  &
+               &                    + (Ex(i,k,3)-Ex(i-1,k,3))) &
+               &               - mudt*  rho(i,k) * half
+          f(i,k,3) = f(i,k,3) + dtdz*((Ez(i,k,1)-Ez(i,k-1,1))  &
+               &                    + (Ez(i,k,2)-Ez(i,k-1,2))  &
+               &                    + (Ez(i,k,3)-Ez(i,k-1,3))) &
+               &               - mudt*  rho(i,k) * half
+       end do
+    end do
+  end subroutine warpx_push_pml_f_2d_withpart
 
   subroutine warpx_push_pml_evec_f_3d (xlo, xhi, ylo, yhi, zlo, zhi, &
        &                             Ex, Exlo, Exhi, &
