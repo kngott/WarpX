@@ -309,6 +309,7 @@ WarpX::EvolveE (int lev, PatchType patch_type, amrex::Real dt)
         const auto& pml_B = (patch_type == PatchType::fine) ? pml[lev]->GetB_fp() : pml[lev]->GetB_cp();
         const auto& pml_E = (patch_type == PatchType::fine) ? pml[lev]->GetE_fp() : pml[lev]->GetE_cp();
         const auto& pml_F = (patch_type == PatchType::fine) ? pml[lev]->GetF_fp() : pml[lev]->GetF_cp();
+        const auto& pml_j = (patch_type == PatchType::fine) ? pml[lev]->Getj_fp() : pml[lev]->Getj_cp();
 #ifdef _OPENMP
 #pragma omp parallel if (Gpu::notInLaunchRegion())
 #endif
@@ -318,7 +319,27 @@ WarpX::EvolveE (int lev, PatchType patch_type, amrex::Real dt)
             const Box& tey  = mfi.tilebox(Ey_nodal_flag);
             const Box& tez  = mfi.tilebox(Ez_nodal_flag);
 
-            WRPX_PUSH_PML_EVEC(
+            if (pml_j[0])
+            {
+                WRPX_PUSH_PML_EVEC_WITHPART(
+			     tex.loVect(), tex.hiVect(),
+			     tey.loVect(), tey.hiVect(),
+			     tez.loVect(), tez.hiVect(),
+			     BL_TO_FORTRAN_3D((*pml_E[0])[mfi]),
+			     BL_TO_FORTRAN_3D((*pml_E[1])[mfi]),
+			     BL_TO_FORTRAN_3D((*pml_E[2])[mfi]),
+			     BL_TO_FORTRAN_3D((*pml_B[0])[mfi]),
+			     BL_TO_FORTRAN_3D((*pml_B[1])[mfi]),
+			     BL_TO_FORTRAN_3D((*pml_B[2])[mfi]),
+			     BL_TO_FORTRAN_3D((*pml_j[0])[mfi]),
+			     BL_TO_FORTRAN_3D((*pml_j[1])[mfi]),
+			     BL_TO_FORTRAN_3D((*pml_j[2])[mfi]),
+                             &mu_c2_dt,
+                             &dtsdx_c2, &dtsdy_c2, &dtsdz_c2);
+            }
+            else
+            {
+                WRPX_PUSH_PML_EVEC(
 			     tex.loVect(), tex.hiVect(),
 			     tey.loVect(), tey.hiVect(),
 			     tez.loVect(), tez.hiVect(),
@@ -329,6 +350,7 @@ WarpX::EvolveE (int lev, PatchType patch_type, amrex::Real dt)
 			     BL_TO_FORTRAN_3D((*pml_B[1])[mfi]),
 			     BL_TO_FORTRAN_3D((*pml_B[2])[mfi]),
                              &dtsdx_c2, &dtsdy_c2, &dtsdz_c2);
+            }
 
             if (pml_F)
             {

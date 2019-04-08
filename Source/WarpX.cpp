@@ -362,6 +362,7 @@ WarpX::ReadParameters ()
 	pp.query("sort_int", sort_int);
 
         pp.query("do_pml", do_pml);
+        pp.query("pml_has_particles", pml_has_particles);
         pp.query("pml_ncell", pml_ncell);
         pp.query("pml_delta", pml_delta);
 

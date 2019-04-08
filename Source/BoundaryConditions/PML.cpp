@@ -329,7 +329,8 @@ MultiSigmaBox::ComputePMLFactorsE (const Real* dx, Real dt)
 
 PML::PML (const BoxArray& grid_ba, const DistributionMapping& grid_dm,
           const Geometry* geom, const Geometry* cgeom,
-          int ncell, int delta, int ref_ratio, int do_dive_cleaning, int do_moving_window)
+          int ncell, int delta, int ref_ratio,
+          int do_dive_cleaning, int do_moving_window, int has_particles)
     : m_geom(geom),
       m_cgeom(cgeom)
 {
@@ -368,6 +369,15 @@ PML::PML (const BoxArray& grid_ba, const DistributionMapping& grid_dm,
         pml_F_fp->setVal(0.0);
     }
 
+    if (has_particles) {
+        pml_j_fp[0].reset(new MultiFab(amrex::convert(ba,WarpX::jx_nodal_flag), dm, 1, 0));
+        pml_j_fp[1].reset(new MultiFab(amrex::convert(ba,WarpX::jy_nodal_flag), dm, 1, 0));
+        pml_j_fp[2].reset(new MultiFab(amrex::convert(ba,WarpX::jz_nodal_flag), dm, 1, 0));
+        pml_j_fp[0]->setVal(0.0);
+        pml_j_fp[1]->setVal(0.0);
+        pml_j_fp[2]->setVal(0.0);
+    }
+
     sigba_fp.reset(new MultiSigmaBox(ba, dm, grid_ba, geom->CellSize(), ncell, delta));
 
     if (cgeom)
@@ -400,6 +410,15 @@ PML::PML (const BoxArray& grid_ba, const DistributionMapping& grid_dm,
         {
             pml_F_cp.reset(new MultiFab(amrex::convert(cba,IntVect::TheUnitVector()), cdm, 3, ngf));
             pml_F_cp->setVal(0.0);
+        }
+
+        if (has_particles) {
+            pml_j_cp[0].reset(new MultiFab(amrex::convert(cba,WarpX::jx_nodal_flag), cdm, 1, 0));
+            pml_j_cp[1].reset(new MultiFab(amrex::convert(cba,WarpX::jy_nodal_flag), cdm, 1, 0));
+            pml_j_cp[2].reset(new MultiFab(amrex::convert(cba,WarpX::jz_nodal_flag), cdm, 1, 0));
+            pml_j_cp[0]->setVal(0.0);
+            pml_j_cp[1]->setVal(0.0);
+            pml_j_cp[2]->setVal(0.0);
         }
 
         sigba_cp.reset(new MultiSigmaBox(cba, cdm, grid_cba, cgeom->CellSize(), ncell, delta));
@@ -504,6 +523,18 @@ PML::GetB_cp ()
     return {pml_B_cp[0].get(), pml_B_cp[1].get(), pml_B_cp[2].get()};
 }
 
+std::array<MultiFab*,3>
+PML::Getj_fp ()
+{
+    return {pml_j_fp[0].get(), pml_j_fp[1].get(), pml_j_fp[2].get()};
+}
+
+std::array<MultiFab*,3>
+PML::Getj_cp ()
+{
+    return {pml_j_cp[0].get(), pml_j_cp[1].get(), pml_j_cp[2].get()};
+}
+
 MultiFab*
 PML::GetF_fp ()
 {
@@ -595,7 +626,7 @@ PML::Exchange (MultiFab& pml, MultiFab& reg, const Geometry& geom)
 
     MultiFab tmpregmf(reg.boxArray(), reg.DistributionMap(), ncp, ngr);
 
-    if (ngp.max() > 0)  // Copy from pml to the ghost cells of regular data
+    if (ngr.max() > 0)  // Copy from pml to the ghost cells of regular data
     {
         MultiFab totpmlmf(pml.boxArray(), pml.DistributionMap(), 1, 0);
         MultiFab::LinComb(totpmlmf, 1.0, pml, 0, 1.0, pml, 1, 0, 1, 0);

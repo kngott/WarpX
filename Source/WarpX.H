@@ -460,6 +460,7 @@ private:
 
     // PML
     int do_pml = 1;
+    int pml_has_particles = 0;
     int pml_ncell = 10;
     int pml_delta = 10;
     amrex::Vector<std::unique_ptr<PML> > pml;

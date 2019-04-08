@@ -426,6 +426,18 @@ WarpX::SyncCurrent ()
     for (int lev = 0; lev <= finest_level; ++lev)
     {
         const auto& period = Geom(lev).periodicity();
+        if (do_pml && pml[lev]->ok()) { // do this before SumBoundary
+            Array<MultiFab*,3> pml_j_fp = pml[lev]->Getj_fp();
+            if (pml_j_fp[0]) {
+                for (int idim = 0; idim < 3; ++idim) {
+                    pml_j_fp[idim]->setVal(0.0);
+                    pml_j_fp[idim]->ParallelAdd(*current_fp[lev][idim],0, 0, 1,
+                                                current_fp[lev][idim]->nGrowVect(),
+                                                pml_j_fp[idim]->nGrowVect(),
+                                                period);
+                }
+            }
+        }
         // When using a bilinear filter with many passes, current_fp has
         // temporarily more ghost cells here, so that its value inside 
         // the domain is correct at the end of this stage.
@@ -455,12 +467,35 @@ WarpX::SyncCurrent ()
         current_fp[lev][0]->copy(*ccx,0,0,1,ngsrc,ngdst,period,FabArrayBase::ADD);
         current_fp[lev][1]->copy(*ccy,0,0,1,ngsrc,ngdst,period,FabArrayBase::ADD);
         current_fp[lev][2]->copy(*ccz,0,0,1,ngsrc,ngdst,period,FabArrayBase::ADD);
+        if (do_pml && pml[lev]->ok()) {
+            Array<MultiFab*,3> pml_j_fp = pml[lev]->Getj_fp();
+            if (pml_j_fp[0]) {
+                pml_j_fp[0]->ParallelAdd(*ccx, 0, 0, 1, ccx->nGrowVect(),
+                                         pml_j_fp[0]->nGrowVect(), period);
+                pml_j_fp[1]->ParallelAdd(*ccy, 0, 0, 1, ccy->nGrowVect(),
+                                         pml_j_fp[1]->nGrowVect(), period);
+                pml_j_fp[2]->ParallelAdd(*ccz, 0, 0, 1, ccz->nGrowVect(),
+                                         pml_j_fp[2]->nGrowVect(), period);
+            }
+        }
     }
 
     // Sum up coarse patch
     for (int lev = 1; lev <= finest_level; ++lev)
     {
         const auto& cperiod = Geom(lev-1).periodicity();
+        if (do_pml && pml[lev]->ok()) { // do this before SumBoundary
+            Array<MultiFab*,3> pml_j_cp = pml[lev]->Getj_cp();
+            if (pml_j_cp[0]) {
+                for (int idim = 0; idim < 3; ++idim) {
+                    pml_j_cp[idim]->setVal(0.0);
+                    pml_j_cp[idim]->ParallelAdd(*current_cp[lev][idim], 0, 0, 1,
+                                                current_cp[lev][idim]->nGrowVect(),
+                                                pml_j_cp[idim]->nGrowVect(),
+                                                cperiod);
+                }
+            }
+        }
         current_cp[lev][0]->SumBoundary(cperiod);
         current_cp[lev][1]->SumBoundary(cperiod);
         current_cp[lev][2]->SumBoundary(cperiod);

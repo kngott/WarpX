@@ -100,7 +100,8 @@ class PML
 public:
     PML (const amrex::BoxArray& ba, const amrex::DistributionMapping& dm,
          const amrex::Geometry* geom, const amrex::Geometry* cgeom,
-         int ncell, int delta, int ref_ratio, int do_dive_cleaning, int do_moving_window);
+         int ncell, int delta, int ref_ratio,
+         int do_dive_cleaning, int do_moving_window, int has_particles);
 
     void ComputePMLFactors (amrex::Real dt);
 
@@ -108,6 +109,9 @@ public:
     std::array<amrex::MultiFab*,3> GetB_fp ();
     std::array<amrex::MultiFab*,3> GetE_cp ();
     std::array<amrex::MultiFab*,3> GetB_cp ();
+
+    std::array<amrex::MultiFab*,3> Getj_fp ();
+    std::array<amrex::MultiFab*,3> Getj_cp ();
 
     amrex::MultiFab* GetF_fp ();
     amrex::MultiFab* GetF_cp ();
@@ -154,6 +158,9 @@ private:
 
     std::array<std::unique_ptr<amrex::MultiFab>,3> pml_E_cp;
     std::array<std::unique_ptr<amrex::MultiFab>,3> pml_B_cp;
+
+    std::array<std::unique_ptr<amrex::MultiFab>,3> pml_j_fp;
+    std::array<std::unique_ptr<amrex::MultiFab>,3> pml_j_cp;
 
     std::unique_ptr<amrex::MultiFab> pml_F_fp;
     std::unique_ptr<amrex::MultiFab> pml_F_cp;

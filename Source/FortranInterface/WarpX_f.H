@@ -24,8 +24,10 @@
 
 #define WRPX_PUSH_PML_BVEC               warpx_push_pml_bvec_3d
 #define WRPX_PUSH_PML_EVEC               warpx_push_pml_evec_3d
+#define WRPX_PUSH_PML_EVEC_WITHPART      warpx_push_pml_evec_3d_withpart
 #define WRPX_PUSH_PML_EVEC_F             warpx_push_pml_evec_f_3d
 #define WRPX_PUSH_PML_F                  warpx_push_pml_f_3d
+#define WRPX_PUSH_PML_F_WITHPART         warpx_push_pml_f_3d_withpart
 #define WRPX_DAMP_PML                    warpx_damp_pml_3d
 #define WRPX_DAMP_PML_F                  warpx_damp_pml_f_3d
 
@@ -54,8 +56,10 @@
 
 #define WRPX_PUSH_PML_BVEC               warpx_push_pml_bvec_2d
 #define WRPX_PUSH_PML_EVEC               warpx_push_pml_evec_2d
+#define WRPX_PUSH_PML_EVEC_WITHPART      warpx_push_pml_evec_2d_withpart
 #define WRPX_PUSH_PML_EVEC_F             warpx_push_pml_evec_f_2d
 #define WRPX_PUSH_PML_F                  warpx_push_pml_f_2d
+#define WRPX_PUSH_PML_F_WITHPART         warpx_push_pml_f_2d_withpart
 #define WRPX_DAMP_PML                    warpx_damp_pml_2d
 #define WRPX_DAMP_PML_F                  warpx_damp_pml_f_2d
 
@@ -381,6 +385,23 @@ extern "C"
                             const amrex::Real* dtsdy,
                             const amrex::Real* dtsdz);
 
+    void WRPX_PUSH_PML_EVEC_WITHPART(const int* xlo, const int* xhi,
+                            const int* ylo, const int* yhi,
+                            const int* zlo, const int* zhi,
+                            BL_FORT_FAB_ARG_3D(ex),
+                            BL_FORT_FAB_ARG_3D(ey),
+                            BL_FORT_FAB_ARG_3D(ez),
+                            const BL_FORT_FAB_ARG_3D(bx),
+                            const BL_FORT_FAB_ARG_3D(by),
+                            const BL_FORT_FAB_ARG_3D(bz),
+                            const BL_FORT_FAB_ARG_3D(jx),
+                            const BL_FORT_FAB_ARG_3D(jy),
+                            const BL_FORT_FAB_ARG_3D(jz),
+                            const amrex::Real* mudt,
+                            const amrex::Real* dtsdx,
+                            const amrex::Real* dtsdy,
+                            const amrex::Real* dtsdz);
+
     void WRPX_PUSH_PML_EVEC_F(const int* xlo, const int* xhi,
                               const int* ylo, const int* yhi,
                               const int* zlo, const int* zhi,
@@ -398,6 +419,17 @@ extern "C"
                          const BL_FORT_FAB_ARG_3D(ex),
                          const BL_FORT_FAB_ARG_3D(ey),
                          const BL_FORT_FAB_ARG_3D(ez),
+                         const amrex::Real* dtsdx,
+                         const amrex::Real* dtsdy,
+                         const amrex::Real* dtsdz);
+
+    void WRPX_PUSH_PML_F_WITHPART(const int* lo, const int* hi,
+                         BL_FORT_FAB_ARG_3D(f),
+                         const BL_FORT_FAB_ARG_3D(ex),
+                         const BL_FORT_FAB_ARG_3D(ey),
+                         const BL_FORT_FAB_ARG_3D(ez),
+                         const BL_FORT_FAB_ARG_3D(rho),
+                         const amrex::Real* mudt,
                          const amrex::Real* dtsdx,
                          const amrex::Real* dtsdy,
                          const amrex::Real* dtsdz);
