@@ -642,6 +642,15 @@ WarpX::SyncRho (amrex::Vector<std::unique_ptr<amrex::MultiFab> >& rhof,
     for (int lev = 0; lev <= finest_level; ++lev)
     {
         const auto& period = Geom(lev).periodicity();
+        if (do_pml && pml[lev]->ok()) { // do this before SumBoundary
+            MultiFab* pml_rho_fp = pml[lev]->Getrho_fp();
+            if (pml_rho_fp) {
+                pml_rho_fp->setVal(0.0);
+                pml_rho_fp->ParallelAdd(*rhof[lev], 0, 0, rhof[lev]->nComp(),
+                                        rhof[lev]->nGrowVect(), pml_rho_fp->nGrowVect(),
+                                        period);
+            }
+        }
         rhof[lev]->SumBoundary(period);
     }
 
@@ -660,12 +669,29 @@ WarpX::SyncRho (amrex::Vector<std::unique_ptr<amrex::MultiFab> >& rhof,
         }
 
         rhof[lev]->copy(*crho,0,0,ncomp,ngsrc,ngdst,period,FabArrayBase::ADD);
+
+        if (do_pml && pml[lev]->ok()) {
+            MultiFab* pml_rho_fp = pml[lev]->Getrho_fp();
+            if (pml_rho_fp) {
+                pml_rho_fp->ParallelAdd(*crho, 0, 0, ncomp, crho->nGrowVect(),
+                                        pml_rho_fp->nGrowVect(), period);
+            }
+        }
     }
 
     // Sum up coarse patch
     for (int lev = 1; lev <= finest_level; ++lev)
     {
         const auto& cperiod = Geom(lev-1).periodicity();
+        if (do_pml && pml[lev]->ok()) { // do this before SumBoundary
+            MultiFab* pml_rho_cp = pml[lev]->Getrho_cp();
+            if (pml_rho_cp) {
+                pml_rho_cp->setVal(0.0);
+                pml_rho_cp->ParallelAdd(*rhoc[lev], 0, 0, rhoc[lev]->nComp(),
+                                        rhoc[lev]->nGrowVect(), pml_rho_cp->nGrowVect(),
+                                        cperiod);
+            }
+        }
         rhoc[lev]->SumBoundary(cperiod);
     }
 

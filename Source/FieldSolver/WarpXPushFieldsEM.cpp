@@ -397,6 +397,7 @@ WarpX::EvolveF (int lev, PatchType patch_type, Real dt, DtType dt_type)
     BL_PROFILE("WarpX::EvolveF()");
 
     static constexpr Real mu_c2 = PhysConst::mu0*PhysConst::c*PhysConst::c;
+    const Real mu_c2_dt = mu_c2*dt;
 
     int patch_level = (patch_type == PatchType::fine) ? lev : lev-1;
     const auto& dx = WarpX::CellSize(patch_level);
@@ -431,6 +432,7 @@ WarpX::EvolveF (int lev, PatchType patch_type, Real dt, DtType dt_type)
     {
         const auto& pml_F = (patch_type == PatchType::fine) ? pml[lev]->GetF_fp() : pml[lev]->GetF_cp();
         const auto& pml_E = (patch_type == PatchType::fine) ? pml[lev]->GetE_fp() : pml[lev]->GetE_cp();
+        const auto& pml_rho = (patch_type == PatchType::fine) ? pml[lev]->Getrho_fp() : pml[lev]->Getrho_cp();
 
 #ifdef _OPENMP
 #pragma omp parallel if (Gpu::notInLaunchRegion())
@@ -438,12 +440,28 @@ WarpX::EvolveF (int lev, PatchType patch_type, Real dt, DtType dt_type)
         for ( MFIter mfi(*pml_F, TilingIfNotGPU()); mfi.isValid(); ++mfi )
         {
             const Box& bx = mfi.tilebox();
-            WRPX_PUSH_PML_F(bx.loVect(), bx.hiVect(),
-			  BL_TO_FORTRAN_ANYD((*pml_F   )[mfi]),
-			  BL_TO_FORTRAN_ANYD((*pml_E[0])[mfi]),
-			  BL_TO_FORTRAN_ANYD((*pml_E[1])[mfi]),
-			  BL_TO_FORTRAN_ANYD((*pml_E[2])[mfi]),
-			  &dtsdx[0], &dtsdx[1], &dtsdx[2]);
+            if (pml_rho)
+            {
+                WRPX_PUSH_PML_F_WITHPART
+                    (bx.loVect(), bx.hiVect(),
+                     BL_TO_FORTRAN_ANYD((*pml_F   )[mfi]),
+                     BL_TO_FORTRAN_ANYD((*pml_E[0])[mfi]),
+                     BL_TO_FORTRAN_ANYD((*pml_E[1])[mfi]),
+                     BL_TO_FORTRAN_ANYD((*pml_E[2])[mfi]),
+                     BL_TO_FORTRAN_N_ANYD((*pml_rho )[mfi], rhocomp),
+                     &mu_c2_dt,
+                     &dtsdx[0], &dtsdx[1], &dtsdx[2]);
+            }
+            else
+            {
+                WRPX_PUSH_PML_F
+                    (bx.loVect(), bx.hiVect(),
+                     BL_TO_FORTRAN_ANYD((*pml_F   )[mfi]),
+                     BL_TO_FORTRAN_ANYD((*pml_E[0])[mfi]),
+                     BL_TO_FORTRAN_ANYD((*pml_E[1])[mfi]),
+                     BL_TO_FORTRAN_ANYD((*pml_E[2])[mfi]),
+                     &dtsdx[0], &dtsdx[1], &dtsdx[2]);
+            }
         }
     }
 }

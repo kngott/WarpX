@@ -113,6 +113,9 @@ public:
     std::array<amrex::MultiFab*,3> Getj_fp ();
     std::array<amrex::MultiFab*,3> Getj_cp ();
 
+    amrex::MultiFab* Getrho_fp ();
+    amrex::MultiFab* Getrho_cp ();
+
     amrex::MultiFab* GetF_fp ();
     amrex::MultiFab* GetF_cp ();
 
@@ -161,6 +164,9 @@ private:
 
     std::array<std::unique_ptr<amrex::MultiFab>,3> pml_j_fp;
     std::array<std::unique_ptr<amrex::MultiFab>,3> pml_j_cp;
+
+    std::unique_ptr<amrex::MultiFab> pml_rho_fp;
+    std::unique_ptr<amrex::MultiFab> pml_rho_cp;
 
     std::unique_ptr<amrex::MultiFab> pml_F_fp;
     std::unique_ptr<amrex::MultiFab> pml_F_cp;

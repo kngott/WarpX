@@ -378,6 +378,10 @@ PML::PML (const BoxArray& grid_ba, const DistributionMapping& grid_dm,
         pml_j_fp[2]->setVal(0.0);
     }
 
+    if (do_dive_cleaning && has_particles) {
+        pml_rho_fp.reset(new MultiFab(amrex::convert(ba,IntVect::TheUnitVector()), dm, 2, 0));
+    }
+
     sigba_fp.reset(new MultiSigmaBox(ba, dm, grid_ba, geom->CellSize(), ncell, delta));
 
     if (cgeom)
@@ -419,6 +423,10 @@ PML::PML (const BoxArray& grid_ba, const DistributionMapping& grid_dm,
             pml_j_cp[0]->setVal(0.0);
             pml_j_cp[1]->setVal(0.0);
             pml_j_cp[2]->setVal(0.0);
+        }
+
+        if (do_dive_cleaning && has_particles) {
+            pml_rho_cp.reset(new MultiFab(amrex::convert(cba,IntVect::TheUnitVector()), cdm, 2, 0));
         }
 
         sigba_cp.reset(new MultiSigmaBox(cba, cdm, grid_cba, cgeom->CellSize(), ncell, delta));
@@ -533,6 +541,18 @@ std::array<MultiFab*,3>
 PML::Getj_cp ()
 {
     return {pml_j_cp[0].get(), pml_j_cp[1].get(), pml_j_cp[2].get()};
+}
+
+MultiFab*
+PML::Getrho_fp ()
+{
+    return pml_rho_fp.get();
+}
+
+MultiFab*
+PML::Getrho_cp ()
+{
+    return pml_rho_cp.get();
 }
 
 MultiFab*
