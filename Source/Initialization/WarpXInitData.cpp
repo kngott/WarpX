@@ -146,6 +146,23 @@ WarpX::InitPML ()
                                    do_moving_window,
                                    pml_has_particles));
         }
+        if (pml_has_particles)
+        {
+            for (int lev = 0; lev < finest_level; ++lev)
+            {
+                BoxArray fba = boxArray(lev);
+                fba.refine(refRatio(lev));
+                const DistributionMapping& dm = DistributionMap(lev);
+                const IntVect& ngJ = current_fp[lev][0]->nGrowVect();
+                current_pml[lev][0].reset(new MultiFab(amrex::convert(fba,jx_nodal_flag),dm,1,ngJ));
+                current_pml[lev][1].reset(new MultiFab(amrex::convert(fba,jy_nodal_flag),dm,1,ngJ));
+                current_pml[lev][2].reset(new MultiFab(amrex::convert(fba,jz_nodal_flag),dm,1,ngJ));
+                if (do_dive_cleaning) {
+                    const IntVect& ngRho = rho_fp[0]->nGrowVect();
+                    charge_pml[lev].reset(new MultiFab(amrex::convert(fba,IntVect::TheUnitVector()),dm,2,ngRho));
+                }
+            }
+        }
     }
 }
 

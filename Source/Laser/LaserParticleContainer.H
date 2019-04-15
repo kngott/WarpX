@@ -32,6 +32,8 @@ public:
                          amrex::MultiFab* rho, amrex::MultiFab* crho,
                          const amrex::MultiFab*, const amrex::MultiFab*, const amrex::MultiFab*,
                          const amrex::MultiFab*, const amrex::MultiFab*, const amrex::MultiFab*,
+                         amrex::MultiFab* jxpml, amrex::MultiFab* jypml, amrex::MultiFab* jzpml,
+                         amrex::MultiFab* rhopml,
                          amrex::Real t, amrex::Real dt) final;
 
     virtual void PushP (int lev, amrex::Real dt,

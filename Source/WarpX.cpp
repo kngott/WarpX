@@ -184,6 +184,8 @@ WarpX::WarpX ()
     rho_cp_owner_masks.resize(nlevs_max);
 
     pml.resize(nlevs_max);
+    current_pml.resize(nlevs_max);
+    charge_pml.resize(nlevs_max);
 
 #ifdef WARPX_DO_ELECTROSTATIC
     masks.resize(nlevs_max);

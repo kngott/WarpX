@@ -203,6 +203,7 @@ WarpXParticleContainer::DepositCurrent(WarpXParIter& pti,
                                           RealVector& uyp, RealVector& uzp,
                                           MultiFab& jx, MultiFab& jy, MultiFab& jz,
                                           MultiFab* cjx, MultiFab* cjy, MultiFab* cjz,
+                                          MultiFab* fjx, MultiFab* fjy, MultiFab* fjz,
                                           const long np_current, const long np,
                                           int thread_num, int lev, Real dt )
 {
@@ -524,7 +525,7 @@ WarpXParticleContainer::DepositCurrent(WarpXParIter& pti,
 
 void
 WarpXParticleContainer::DepositCharge ( WarpXParIter& pti, RealVector& wp,
-                                  MultiFab* rhomf, MultiFab* crhomf, int icomp,
+                                  MultiFab* rhomf, MultiFab* crhomf, MultiFab* frhomf, int icomp,
                                  const long np_current,
                                  const long np, int thread_num, int lev )
 {

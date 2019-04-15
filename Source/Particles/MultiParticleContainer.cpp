@@ -137,6 +137,8 @@ MultiParticleContainer::Evolve (int lev,
                                 MultiFab* rho,
                                 const MultiFab* cEx, const MultiFab* cEy, const MultiFab* cEz,
                                 const MultiFab* cBx, const MultiFab* cBy, const MultiFab* cBz,
+                                MultiFab* jxpml, MultiFab* jypml, MultiFab* jzpml,
+                                MultiFab* rhopml,
                                 Real t, Real dt)
 {
     jx.setVal(0.0);
@@ -146,9 +148,15 @@ MultiParticleContainer::Evolve (int lev,
     if (cjy) cjy->setVal(0.0);
     if (cjz) cjz->setVal(0.0);
     if (rho) rho->setVal(0.0);
+    if (crho) crho->setVal(0.0);
+    if (jxpml) jxpml->setVal(0.0);
+    if (jypml) jypml->setVal(0.0);
+    if (jzpml) jzpml->setVal(0.0);
+    if (rhopml) rhopml->setVal(0.0);
     for (auto& pc : allcontainers) {
 	pc->Evolve(lev, Ex, Ey, Ez, Bx, By, Bz, jx, jy, jz, cjx, cjy, cjz,
-                   rho, cEx, cEy, cEz, cBx, cBy, cBz, t, dt);
+                   rho, cEx, cEy, cEz, cBx, cBy, cBz, jxpml, jypml, jzpml, rhopml,
+                   t, dt);
     }    
 }
 
@@ -214,6 +222,8 @@ MultiParticleContainer::Evolve (int lev,
                                 MultiFab* rho, MultiFab* crho,
                                 const MultiFab* cEx, const MultiFab* cEy, const MultiFab* cEz,
                                 const MultiFab* cBx, const MultiFab* cBy, const MultiFab* cBz,
+                                MultiFab* jxpml, MultiFab* jypml, MultiFab* jzpml,
+                                MultiFab* rhopml,
                                 Real t, Real dt)
 {
     jx.setVal(0.0);
@@ -224,9 +234,14 @@ MultiParticleContainer::Evolve (int lev,
     if (cjz) cjz->setVal(0.0);
     if (rho) rho->setVal(0.0);
     if (crho) crho->setVal(0.0);
+    if (jxpml) jxpml->setVal(0.0);
+    if (jypml) jypml->setVal(0.0);
+    if (jzpml) jzpml->setVal(0.0);
+    if (rhopml) rhopml->setVal(0.0);
     for (auto& pc : allcontainers) {
 	pc->Evolve(lev, Ex, Ey, Ez, Bx, By, Bz, jx, jy, jz, cjx, cjy, cjz,
-                   rho, crho, cEx, cEy, cEz, cBx, cBy, cBz, t, dt);
+                   rho, crho, cEx, cEy, cEz, cBx, cBy, cBz, jxpml, jypml, jzpml, rhopml,
+                   t, dt);
     }
 }
 

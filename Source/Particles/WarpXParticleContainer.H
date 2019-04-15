@@ -122,6 +122,8 @@ public:
                          amrex::MultiFab* rho, amrex::MultiFab* crho,
                          const amrex::MultiFab* cEx, const amrex::MultiFab* cEy, const amrex::MultiFab* cEz,
                          const amrex::MultiFab* cBx, const amrex::MultiFab* cBy, const amrex::MultiFab* cBz,
+                         amrex::MultiFab* jxpml, amrex::MultiFab* jypml, amrex::MultiFab* jzpml,
+                         amrex::MultiFab* rhopml,
                          amrex::Real t, amrex::Real dt) = 0;
 
     virtual void PostRestart () = 0;
@@ -169,6 +171,7 @@ public:
                              RealVector& wp,
                              amrex::MultiFab* rhomf,
                              amrex::MultiFab* crhomf,
+                             amrex::MultiFab* rhopmlmf,
                              int icomp,
                              const long np_current,
                              const long np,
@@ -186,6 +189,9 @@ public:
                               amrex::MultiFab* cjx,
                               amrex::MultiFab* cjy,
                               amrex::MultiFab* cjz,
+                              amrex::MultiFab* jxpml,
+                              amrex::MultiFab* jypml,
+                              amrex::MultiFab* jzpml,
                               const long np_current,
                               const long np,
                               int thread_num,

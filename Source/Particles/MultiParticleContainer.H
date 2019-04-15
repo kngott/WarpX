@@ -101,6 +101,8 @@ public:
                  amrex::MultiFab* rho, amrex::MultiFab* crho,
 		 const amrex::MultiFab* cEx, const amrex::MultiFab* cEy, const amrex::MultiFab* cEz,
 		 const amrex::MultiFab* cBx, const amrex::MultiFab* cBy, const amrex::MultiFab* cBz,
+                 amrex::MultiFab* jxpml, amrex::MultiFab* jypml, amrex::MultiFab* jzpml,
+                 amrex::MultiFab* rhopml,
                  amrex::Real t, amrex::Real dt);
 
     ///

@@ -317,6 +317,8 @@ RigidInjectedParticleContainer::Evolve (int lev,
                                         MultiFab* rho, MultiFab* crho,
                                         const MultiFab* cEx, const MultiFab* cEy, const MultiFab* cEz,
                                         const MultiFab* cBx, const MultiFab* cBy, const MultiFab* cBz,
+                                        MultiFab* jxpml, MultiFab* jypml, MultiFab* jzpml,
+                                        MultiFab* rhopml,
                                         Real t, Real dt)
 {
 
@@ -342,6 +344,8 @@ RigidInjectedParticleContainer::Evolve (int lev,
                                        rho, crho,
                                        cEx, cEy, cEz,
                                        cBx, cBy, cBz,
+                                       jxpml, jypml, jzpml,
+                                       rhopml,
                                        t, dt);
 
     // Check if all done_injecting_temp are still true.

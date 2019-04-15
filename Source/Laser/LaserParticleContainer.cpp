@@ -312,6 +312,8 @@ LaserParticleContainer::Evolve (int lev,
                                 MultiFab* rho, MultiFab* crho,
                                 const MultiFab*, const MultiFab*, const MultiFab*,
                                 const MultiFab*, const MultiFab*, const MultiFab*,
+                                MultiFab* jxpml, MultiFab* jypml, MultiFab* jzpml,
+                                MultiFab* rhopml,
                                 Real t, Real dt)
 {
     BL_PROFILE("Laser::Evolve()");
@@ -379,7 +381,7 @@ LaserParticleContainer::Evolve (int lev,
             pti.GetPosition(m_xp[thread_num], m_yp[thread_num], m_zp[thread_num]);
 	    BL_PROFILE_VAR_STOP(blp_copy);
 
-            if (rho) DepositCharge(pti, wp, rho, crho, 0, np_current, np, thread_num, lev);
+            if (rho) DepositCharge(pti, wp, rho, crho, rhopml, 0, np_current, np, thread_num, lev);
 
 	    //
 	    // Particle Push
@@ -430,7 +432,8 @@ LaserParticleContainer::Evolve (int lev,
 	    // Current Deposition
 	    //
             DepositCurrent(pti, wp, uxp, uyp, uzp, jx, jy, jz,
-                           cjx, cjy, cjz, np_current, np, thread_num, lev, dt);
+                           cjx, cjy, cjz, jxpml, jypml, jzpml,
+                           np_current, np, thread_num, lev, dt);
 
 	    //
 	    // copy particle data back
@@ -439,7 +442,7 @@ LaserParticleContainer::Evolve (int lev,
             pti.SetPosition(m_xp[thread_num], m_yp[thread_num], m_zp[thread_num]);
             BL_PROFILE_VAR_STOP(blp_copy);
 
-            if (rho) DepositCharge(pti, wp, rho, crho, 1, np_current, np, thread_num, lev);
+            if (rho) DepositCharge(pti, wp, rho, crho, rhopml, 1, np_current, np, thread_num, lev);
 
             if (cost) {
                 const Box& tbx = pti.tilebox();

@@ -452,6 +452,8 @@ WarpX::PushParticlesandDepose (int lev, Real cur_time)
                  rho_fp[lev].get(), charge_buf[lev].get(),
                  Efield_cax[lev][0].get(), Efield_cax[lev][1].get(), Efield_cax[lev][2].get(),
                  Bfield_cax[lev][0].get(), Bfield_cax[lev][1].get(), Bfield_cax[lev][2].get(),
+                 current_pml[lev][0].get(), current_pml[lev][1].get(), current_pml[lev][2].get(),
+                 charge_pml[lev].get(),
                  cur_time, dt[lev]);
 }
 
