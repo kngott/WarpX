@@ -537,6 +537,9 @@ private:
 
     bool is_synchronized = true;
 
+    amrex::Vector<std::string> particle_plot_vars;
+    amrex::Vector<int> particle_plot_flags;
+    
 #ifdef WARPX_USE_PSATD
     // Store fields in real space on the dual grid (i.e. the grid for the FFT push of the fields)
     // This includes data for the FFT guard cells (between FFT groups)
@@ -578,6 +581,7 @@ public:
         void operator= (FFTData const&) = delete;
         void operator= (FFTData&&) = delete;
     };
+
 private:
 
     amrex::Vector<std::unique_ptr<amrex::LayoutData<FFTData> > > dataptr_fp_fft;

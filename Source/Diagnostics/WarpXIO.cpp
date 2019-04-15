@@ -11,6 +11,11 @@
 #include <AMReX_AmrMeshInSituBridge.H>
 #endif
 
+#ifdef AMREX_USE_ASCENT
+#include <ascent.hpp>
+#include <AMReX_Conduit_Blueprint.H>
+#endif
+
 using namespace amrex;
 
 namespace
@@ -175,7 +180,7 @@ WarpX::WriteCheckPointFile() const
         }
     }
 
-    mypc->Checkpoint(checkpointname, true);
+    mypc->Checkpoint(checkpointname);
 
     VisMF::SetHeaderVersion(current_version);
 }
@@ -439,7 +444,7 @@ WarpX::GetCellCenteredData() {
 void
 WarpX::UpdateInSitu () const
 {
-#ifdef BL_USE_SENSEI_INSITU
+#if defined(BL_USE_SENSEI_INSITU) || defined(AMREX_USE_ASCENT)
     BL_PROFILE("WarpX::UpdateInSitu()");
 
     // Average the fields from the simulation to the cell centers
@@ -449,9 +454,10 @@ WarpX::UpdateInSitu () const
     Vector<MultiFab> mf_avg;
     WarpX::AverageAndPackFields( varnames, mf_avg, ngrow );
 
+#ifdef BL_USE_SENSEI_INSITU
     if (insitu_bridge->update(istep[0], t_new[0],
         dynamic_cast<amrex::AmrMesh*>(const_cast<WarpX*>(this)),
-        {&mf}, {varnames}))
+        {&mf_avg}, {varnames}))
     {
         amrex::ErrorStream()
             << "WarpXIO::UpdateInSitu : Failed to update the in situ bridge."
@@ -459,6 +465,30 @@ WarpX::UpdateInSitu () const
 
         amrex::Abort();
     }
+#endif
+
+#ifdef AMREX_USE_ASCENT
+    conduit::Node bp_mesh;
+    MultiLevelToBlueprint(finest_level+1,
+            amrex::GetVecOfConstPtrs(mf_avg),
+            varnames,
+            Geom(),
+            t_new[0],
+            istep,
+            refRatio(),
+            bp_mesh);
+
+    ascent::Ascent ascent;
+    conduit::Node opts;
+    opts["exceptions"] = "catch";
+    opts["mpi_comm"] = MPI_Comm_c2f(ParallelDescriptor::Communicator());
+    ascent.open(opts);
+    ascent.publish(bp_mesh);
+    conduit::Node actions;
+    ascent.execute(actions);
+    ascent.close();
+#endif
+
 #endif
 }
 
@@ -557,31 +587,26 @@ WarpX::WritePlotFile () const
 
             // Coarse path
             if (plot_crsepatch) {
-                const Real* dx = Geom(lev-1).CellSize();
-                const int r_ratio = refRatio(lev-1)[0];
                 WriteCoarseVector( "E",
                     Efield_cp[lev][0], Efield_cp[lev][1], Efield_cp[lev][2],
                     Efield_fp[lev][0], Efield_fp[lev][1], Efield_fp[lev][2],
-                    dm, raw_pltname, level_prefix, lev, plot_raw_fields_guards,
-                    r_ratio, dx );
+                    dm, raw_pltname, level_prefix, lev, plot_raw_fields_guards);
                 WriteCoarseVector( "B",
                     Bfield_cp[lev][0], Bfield_cp[lev][1], Bfield_cp[lev][2],
                     Bfield_fp[lev][0], Bfield_fp[lev][1], Bfield_fp[lev][2],
-                    dm, raw_pltname, level_prefix, lev, plot_raw_fields_guards,
-                    r_ratio, dx );
+                    dm, raw_pltname, level_prefix, lev, plot_raw_fields_guards);
                 WriteCoarseVector( "j",
                     current_cp[lev][0], current_cp[lev][1], current_cp[lev][2],
                     current_fp[lev][0], current_fp[lev][1], current_fp[lev][2],
-                    dm, raw_pltname, level_prefix, lev, plot_raw_fields_guards,
-                    r_ratio, dx );
+                    dm, raw_pltname, level_prefix, lev, plot_raw_fields_guards);
                 if (F_cp[lev]) WriteCoarseScalar(
                         "F", F_cp[lev], F_fp[lev],
                         dm, raw_pltname, level_prefix, lev,
-                        plot_raw_fields_guards, r_ratio, dx );
+                        plot_raw_fields_guards);
                 if (plot_rho) WriteCoarseScalar(
                         "rho", rho_cp[lev], rho_fp[lev],
                         dm, raw_pltname, level_prefix, lev,
-                        plot_raw_fields_guards, r_ratio, dx, 1 );
+                        plot_raw_fields_guards, 1);
                         // Use the component 1 of `rho_cp`, i.e. rho_new for time synchronization
             }
         }
@@ -612,7 +637,7 @@ WarpX::WritePlotFile () const
     particle_varnames.push_back("uzold");
 #endif
 
-    mypc->Checkpoint(plotfilename, true, particle_varnames);
+    mypc->WritePlotFile(plotfilename, particle_plot_flags, particle_varnames);
 
     WriteJobInfo(plotfilename);
 
