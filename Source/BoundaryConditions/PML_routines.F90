@@ -651,7 +651,7 @@ contains
     real(amrex_real), intent(in   ) :: Ex (Exlo(1):Exhi(1),Exlo(2):Exhi(2),Exlo(3):Exhi(3),3)
     real(amrex_real), intent(in   ) :: Ey (Eylo(1):Eyhi(1),Eylo(2):Eyhi(2),Eylo(3):Eyhi(3),3)
     real(amrex_real), intent(in   ) :: Ez (Ezlo(1):Ezhi(1),Ezlo(2):Ezhi(2),Ezlo(3):Ezhi(3),3)
-    real(amrex_real), intent(in   ) :: rho (Ezlo(1):Ezhi(1),Ezlo(2):Ezhi(2),Ezlo(3):Ezhi(3))
+    real(amrex_real), intent(in   ) :: rho (rholo(1):rhohi(1),rholo(2):rhohi(2),rholo(3):rhohi(3))
     real(amrex_real), intent(in) :: mudt, dtdx, dtdy, dtdz
 
     real(amrex_real), parameter :: third = 1.d0/3.d0
@@ -721,7 +721,7 @@ contains
     real(amrex_real), intent(in   ) :: Ex (Exlo(1):Exhi(1),Exlo(2):Exhi(2),3)
     real(amrex_real), intent(in   ) :: Ey (Eylo(1):Eyhi(1),Eylo(2):Eyhi(2),3)
     real(amrex_real), intent(in   ) :: Ez (Ezlo(1):Ezhi(1),Ezlo(2):Ezhi(2),3)
-    real(amrex_real), intent(in   ) :: rho (Ezlo(1):Ezhi(1),Ezlo(2):Ezhi(2))
+    real(amrex_real), intent(in   ) :: rho (rholo(1):rhohi(1),rholo(2):rhohi(2))
     real(amrex_real), intent(in) :: mudt, dtdx, dtdy, dtdz
 
     real(amrex_real), parameter :: half = 1.d0/2.d0
