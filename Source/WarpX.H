@@ -466,7 +466,7 @@ private:
     amrex::Vector<std::unique_ptr<PML> > pml;
     //
     amrex::Vector<std::array< std::unique_ptr<amrex::MultiFab>, 3 > > current_pml;
-    amrex::Vector<std::unique_ptr<amrex::MultiFab> > charge_pml;
+    amrex::Vector<std::unique_ptr<amrex::MultiFab> > rho_pml;
 
     amrex::Real moving_window_x = std::numeric_limits<amrex::Real>::max();
     amrex::Real moving_window_v = std::numeric_limits<amrex::Real>::max();

@@ -185,7 +185,7 @@ WarpX::WarpX ()
 
     pml.resize(nlevs_max);
     current_pml.resize(nlevs_max);
-    charge_pml.resize(nlevs_max);
+    rho_pml.resize(nlevs_max);
 
 #ifdef WARPX_DO_ELECTROSTATIC
     masks.resize(nlevs_max);
@@ -365,6 +365,7 @@ WarpX::ReadParameters ()
 
         pp.query("do_pml", do_pml);
         pp.query("pml_has_particles", pml_has_particles);
+        if (!do_pml) pml_has_particles = false;
         pp.query("pml_ncell", pml_ncell);
         pp.query("pml_delta", pml_delta);
 

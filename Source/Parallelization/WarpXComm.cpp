@@ -355,6 +355,19 @@ WarpX::SyncCurrent ()
 {
     BL_PROFILE("SyncCurrent()");
 
+    Vector<Array<std::unique_ptr<MultiFab>,3> > current_save(finest_level);
+    if (do_pml && pml_has_particles) {
+        for (int lev = 0; lev < finest_level; ++lev) {
+            for (int idim = 0; idim < 3; ++idim) {
+                const auto& ng = current_fp[lev][idim]->nGrowVect();
+                current_save[lev][idim].reset(new MultiFab(current_fp[lev][idim]->boxArray(),
+                                                           current_fp[lev][idim]->DistributionMap(),
+                                                           1, ng));
+                MultiFab::Copy(*current_save[lev][idim], *current_fp[lev][idim], 0, 0, 1, ng);
+            }
+        }
+    }
+
     // Restrict fine patch current onto the coarse patch, before fine patch SumBoundary
     for (int lev = 1; lev <= finest_level; ++lev)
     {
@@ -533,6 +546,34 @@ WarpX::SyncCurrent ()
         }
     }
 
+    if (do_pml && pml_has_particles) {
+        for (int lev = 0; lev < finest_level; ++lev) {
+            Periodicity period = Geom(lev+1).periodicity();
+            IntVect ngsrc = current_pml[lev][0]->nGrowVect();
+            IntVect ngdst(0);
+            Array<MultiFab*,3> pml_j_fp = pml[lev+1]->Getj_fp();
+            for (int idim = 0; idim < 3; ++idim) {
+                current_fp[lev+1][idim]->ParallelAdd(*current_pml[lev][idim],0,0,1,
+                                                     ngsrc,ngdst,period);
+                if (pml_j_fp[idim]->ok()) {
+                    pml_j_fp[idim]->ParallelAdd(*current_pml[lev][idim],0,0,1,
+                                                ngsrc,ngdst,period);
+                }
+            }
+            period = Geom(lev).periodicity();
+            ngsrc = current_save[lev][0]->nGrowVect();
+            Array<MultiFab*,3> pml_j_cp = pml[lev+1]->Getj_cp();
+            for (int idim = 0; idim < 3; ++idim) {
+                current_cp[lev+1][idim]->ParallelAdd(*current_save[lev][idim],0,0,1,
+                                                     ngsrc,ngdst,period);
+                if (pml_j_cp[idim]->ok()) {
+                    pml_j_cp[idim]->ParallelAdd(*current_save[lev][idim],0,0,1,
+                                                ngsrc,ngdst,period);
+                }
+            }
+        }
+    }
+
     // sync shared nodal edges
     for (int lev = 0; lev <= finest_level; ++lev)
     {
@@ -590,6 +631,18 @@ WarpX::SyncRho (amrex::Vector<std::unique_ptr<amrex::MultiFab> >& rhof,
                 amrex::Vector<std::unique_ptr<amrex::MultiFab> >& rhoc)
 {
     if (!rhof[0]) return;
+
+    Vector<std::unique_ptr<MultiFab> > rho_save(finest_level);
+    if (do_pml && pml_has_particles) {
+        for (int lev = 0; lev < finest_level; ++lev) {
+            const int nc   = rhof[lev]->nComp();
+            const auto& ng = rhof[lev]->nGrowVect();
+            rho_save[lev].reset(new MultiFab(rhof[lev]->boxArray(),
+                                             rhof[lev]->DistributionMap(),
+                                             nc, ng));
+            MultiFab::Copy(*rho_save[lev], *rhof[lev], 0, 0, nc, ng);
+        }
+    }
 
     // Restrict fine patch onto the coarse patch, before fine patch SumBoundary
     for (int lev = 1; lev <= finest_level; ++lev)
@@ -709,6 +762,27 @@ WarpX::SyncRho (amrex::Vector<std::unique_ptr<amrex::MultiFab> >& rhof,
             if (rho_buf_g[lev]) {
                 std::swap(rho_buf_g[lev], charge_buf[lev]);
                 MultiFab::Copy(*charge_buf[lev], *rho_buf_g[lev], 0, 0, rhoc[lev]->nComp(), 0);
+            }
+        }
+    }
+
+    if (do_pml && pml_has_particles) {
+        for (int lev = 0; lev < finest_level; ++lev) {
+            Periodicity period = Geom(lev+1).periodicity();
+            IntVect ngsrc = rho_pml[lev]->nGrowVect();
+            IntVect ngdst(0);
+            const int nc = rho_pml[lev]->nComp();
+            rhof[lev+1]->ParallelAdd(*rho_pml[lev], 0, 0, nc, ngsrc, ngdst, period);
+            MultiFab* pml_rho_fp = pml[lev+1]->Getrho_fp();
+            if (pml_rho_fp) {
+                pml_rho_fp->ParallelAdd(*rho_pml[lev], 0, 0, nc, ngsrc, ngdst, period);
+            }
+            period = Geom(lev).periodicity();
+            ngsrc = rho_save[lev]->nGrowVect();
+            rhoc[lev+1]->ParallelAdd(*rho_save[lev], 0, 0, nc, ngsrc, ngdst, period);
+            MultiFab* pml_rho_cp = pml[lev+1]->Getrho_cp();
+            if (pml_rho_cp) {
+                pml_rho_cp->ParallelAdd(*rho_save[lev], 0, 0, nc, ngsrc, ngdst, period);
             }
         }
     }

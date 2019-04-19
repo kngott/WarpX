@@ -159,7 +159,7 @@ WarpX::InitPML ()
                 current_pml[lev][2].reset(new MultiFab(amrex::convert(fba,jz_nodal_flag),dm,1,ngJ));
                 if (do_dive_cleaning) {
                     const IntVect& ngRho = rho_fp[0]->nGrowVect();
-                    charge_pml[lev].reset(new MultiFab(amrex::convert(fba,IntVect::TheUnitVector()),dm,2,ngRho));
+                    rho_pml[lev].reset(new MultiFab(amrex::convert(fba,IntVect::TheUnitVector()),dm,2,ngRho));
                 }
             }
         }
