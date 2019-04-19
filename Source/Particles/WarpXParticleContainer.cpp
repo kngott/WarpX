@@ -52,6 +52,10 @@ WarpXParticleContainer::WarpXParticleContainer (AmrCore* amr_core, int ispecies)
     local_jx.resize(num_threads);
     local_jy.resize(num_threads);
     local_jz.resize(num_threads);
+    local_frho.resize(num_threads);
+    local_fjx.resize(num_threads);
+    local_fjy.resize(num_threads);
+    local_fjz.resize(num_threads);
     m_xp.resize(num_threads);
     m_yp.resize(num_threads);
     m_zp.resize(num_threads);
@@ -218,6 +222,17 @@ WarpXParticleContainer::DepositCurrent(WarpXParIter& pti,
 
   bool j_is_nodal = jx.is_nodal() and jy.is_nodal() and jz.is_nodal();
 
+  Real *fjx_ptr, *fjy_ptr, *fjz_ptr;
+  std::array<Real,3> fdx;
+  Box ftbx, ftby, ftbz;
+  if (fjx) {
+      fdx = WarpX::CellSize(lev+1);
+      ftbx = amrex::refine(tbx,WarpX::RefRatio(lev));
+      ftby = amrex::refine(tby,WarpX::RefRatio(lev));
+      ftbz = amrex::refine(tbz,WarpX::RefRatio(lev));
+  }
+
+
   // Deposit charge for particles that are not in the current buffers
   if (np_current > 0)
   {
@@ -229,6 +244,16 @@ WarpXParticleContainer::DepositCurrent(WarpXParIter& pti,
       auto jxntot = jx[pti].length();
       auto jyntot = jy[pti].length();
       auto jzntot = jz[pti].length();
+
+      IntVect fjxntot, fjyntot, fjzntot;
+      if (fjx) {
+          fjx_ptr = (*fjx)[pti].dataPtr();
+          fjy_ptr = (*fjy)[pti].dataPtr();
+          fjz_ptr = (*fjz)[pti].dataPtr();
+          fjxntot = (*fjx)[pti].length();
+          fjyntot = (*fjy)[pti].length();
+          fjzntot = (*fjz)[pti].length();
+      }
 #else
       tbx.grow(ngJ);
       tby.grow(ngJ);
@@ -249,6 +274,29 @@ WarpXParticleContainer::DepositCurrent(WarpXParIter& pti,
       auto jxntot = local_jx[thread_num].length();
       auto jyntot = local_jy[thread_num].length();
       auto jzntot = local_jz[thread_num].length();
+
+      IntVect fjxntot, fjyntot, fjzntot;
+      if (fjx) {
+          ftbx.grow(ngJ);
+          ftby.grow(ngJ);
+          ftbz.grow(ngJ);
+
+          local_fjx[thread_num].resize(ftbx);
+          local_fjy[thread_num].resize(ftby);
+          local_fjz[thread_num].resize(ftbz);
+
+          fjx_ptr = local_fjx[thread_num].dataPtr();
+          fjy_ptr = local_fjy[thread_num].dataPtr();
+          fjz_ptr = local_fjz[thread_num].dataPtr();
+
+          local_fjx[thread_num].setVal(0.0);
+          local_fjy[thread_num].setVal(0.0);
+          local_fjz[thread_num].setVal(0.0);
+
+          fjxntot = local_fjx[thread_num].length();
+          fjyntot = local_fjy[thread_num].length();
+          fjzntot = local_fjz[thread_num].length();
+      }
 #endif
 
       BL_PROFILE_VAR_START(blp_pxr_cd);
@@ -331,7 +379,7 @@ WarpXParticleContainer::DepositCurrent(WarpXParIter& pti,
       }
       BL_PROFILE_VAR_STOP(blp_pxr_cd);
 
-#ifndef AMREX_USE_GPU            
+#ifndef AMREX_USE_GPU
       BL_PROFILE_VAR_START(blp_accumulate);
 
       jx[pti].atomicAdd(local_jx[thread_num], tbx, tbx, 0, 0, 1);
@@ -340,6 +388,31 @@ WarpXParticleContainer::DepositCurrent(WarpXParIter& pti,
 
       BL_PROFILE_VAR_STOP(blp_accumulate);
 #endif
+
+      if (fjx) {
+          AMREX_ALWAYS_ASSERT_WITH_MESSAGE(!j_is_nodal, "j cannot be nodal");
+          warpx_current_deposition(
+                               fjx_ptr, &ngJ, fjxntot.getVect(),
+                               fjy_ptr, &ngJ, fjyntot.getVect(),
+                               fjz_ptr, &ngJ, fjzntot.getVect(),
+                               &np_current,
+                               m_xp[thread_num].dataPtr(),
+                               m_yp[thread_num].dataPtr(),
+                               m_zp[thread_num].dataPtr(),
+                               uxp.dataPtr(), uyp.dataPtr(), uzp.dataPtr(),
+                               m_giv[thread_num].dataPtr(),
+                               wp.dataPtr(), &this->charge,
+                               &xyzmin[0], &xyzmin[1], &xyzmin[2],
+                               &dt, &fdx[0], &fdx[1], &fdx[2],
+                               &WarpX::nox,&WarpX::noy,&WarpX::noz,
+                               &lvect,&WarpX::current_deposition_algo);
+
+#ifndef AMREX_USE_GPU
+          (*fjx)[pti].atomicAdd(local_fjx[thread_num], ftbx, ftbx, 0, 0, 1);
+          (*fjy)[pti].atomicAdd(local_fjy[thread_num], ftby, ftby, 0, 0, 1);
+          (*fjz)[pti].atomicAdd(local_fjz[thread_num], ftbz, ftbz, 0, 0, 1);
+#endif
+      }
   }
 
   // Deposit charge for particles that are in the current buffers
@@ -476,7 +549,7 @@ WarpXParticleContainer::DepositCurrent(WarpXParIter& pti,
       BL_PROFILE_VAR_STOP(blp_accumulate);
 #endif
     }
-};
+}
 
 
 void
@@ -499,6 +572,14 @@ WarpXParticleContainer::DepositCharge ( WarpXParIter& pti, RealVector& wp,
   const std::array<Real,3>& dx = WarpX::CellSize(lev);
   const std::array<Real,3>& cdx = WarpX::CellSize(std::max(lev-1,0));
 
+  Real *fdata_ptr;
+  std::array<Real,3> fdx;
+  Box tile_fbox;
+  if (frhomf) {
+      fdx = WarpX::CellSize(lev+1);
+      tile_fbox = amrex::refine(tile_box,WarpX::RefRatio(lev));
+  }
+
   // Deposit charge for particles that are not in the current buffers
   if (np_current > 0)
   {
@@ -507,6 +588,12 @@ WarpXParticleContainer::DepositCharge ( WarpXParIter& pti, RealVector& wp,
 #ifdef AMREX_USE_GPU
       data_ptr = (*rhomf)[pti].dataPtr();
       auto rholen = (*rhomf)[pti].length();
+
+      IntVect frholen;
+      if (frhomf) {
+          fdata_ptr = (*frhomf)[pti].dataPtr();
+          frholen   = (*frhomf)[pti].length();
+      }
 #else
       tile_box.grow(ngRho);
       local_rho[thread_num].resize(tile_box);
@@ -515,6 +602,17 @@ WarpXParticleContainer::DepositCharge ( WarpXParIter& pti, RealVector& wp,
       auto rholen = local_rho[thread_num].length();
 
       local_rho[thread_num].setVal(0.0);
+
+      IntVect frholen;
+      if (frhomf) {
+          tile_fbox.grow(ngRho);
+          local_frho[thread_num].resize(tile_fbox);
+
+          fdata_ptr = local_frho[thread_num].dataPtr();
+          frholen = local_frho[thread_num].length();
+
+          local_frho[thread_num].setVal(0.0);
+      }
 #endif
 
 #if (AMREX_SPACEDIM == 3)
@@ -540,13 +638,39 @@ WarpXParticleContainer::DepositCharge ( WarpXParIter& pti, RealVector& wp,
                               &lvect, &WarpX::charge_deposition_algo);
       BL_PROFILE_VAR_STOP(blp_pxr_chd);
 
-#ifndef AMREX_USE_GPU            
+#ifndef AMREX_USE_GPU
       BL_PROFILE_VAR_START(blp_accumulate);
 
       (*rhomf)[pti].atomicAdd(local_rho[thread_num], tile_box, tile_box, 0, icomp, 1);
 
       BL_PROFILE_VAR_STOP(blp_accumulate);
 #endif
+
+      if (frhomf) {
+#if (AMREX_SPACEDIM == 3)
+          const long fnx = frholen[0]-1-2*ngRho;
+          const long fny = frholen[1]-1-2*ngRho;
+          const long fnz = frholen[2]-1-2*ngRho;
+#else
+          const long fnx = frholen[0]-1-2*ngRho;
+          const long fny = 0;
+          const long fnz = frholen[1]-1-2*ngRho;
+#endif
+          warpx_charge_deposition(fdata_ptr, &np_current,
+                                  m_xp[thread_num].dataPtr(),
+                                  m_yp[thread_num].dataPtr(),
+                                  m_zp[thread_num].dataPtr(),
+                                  wp.dataPtr(),
+                                  &this->charge,
+                                  &xyzmin[0], &xyzmin[1], &xyzmin[2],
+                                  &fdx[0], &fdx[1], &fdx[2], &fnx, &fny, &fnz,
+                                  &ngRho, &ngRho, &ngRho,
+                                  &WarpX::nox,&WarpX::noy,&WarpX::noz,
+                                  &lvect, &WarpX::charge_deposition_algo);
+#ifndef AMREX_USE_GPU
+          (*frhomf)[pti].atomicAdd(local_frho[thread_num], tile_fbox, tile_fbox, 0, icomp, 1);
+#endif
+      }
   }
 
   // Deposit charge for particles that are in the current buffers
