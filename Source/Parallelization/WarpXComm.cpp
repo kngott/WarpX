@@ -564,6 +564,20 @@ WarpX::SyncCurrent ()
             ngsrc = current_save[lev][0]->nGrowVect();
             Array<MultiFab*,3> pml_j_cp = pml[lev+1]->Getj_cp();
             for (int idim = 0; idim < 3; ++idim) {
+                BoxArray const& fba = amrex::coarsen(pml_j_fp[idim]->boxArray(), WarpX::RefRatio(lev));
+                FArrayBox mask;
+                std::vector<std::pair<int,Box> > isects;
+                for (MFIter mfi(*current_save[lev][idim]); mfi.isValid(); ++mfi) {
+                    const Box& bx = mfi.fabbox();
+                    mask.resize(bx);
+                    mask.setVal(0.0);
+                    fba.intersections(bx, isects);
+                    for (auto const& isect : isects) {
+                        mask.setVal(1.0, isect.second);
+                    }
+                    (*current_save[lev][idim])[mfi].mult(mask,0,0,1);
+                }
+
                 current_cp[lev+1][idim]->ParallelAdd(*current_save[lev][idim],0,0,1,
                                                      ngsrc,ngdst,period);
                 if (pml_j_cp[idim]->ok()) {
