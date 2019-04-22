@@ -793,6 +793,21 @@ WarpX::SyncRho (amrex::Vector<std::unique_ptr<amrex::MultiFab> >& rhof,
             }
             period = Geom(lev).periodicity();
             ngsrc = rho_save[lev]->nGrowVect();
+
+            BoxArray const& fba = amrex::coarsen(pml_rho_fp->boxArray(), WarpX::RefRatio(lev));
+            FArrayBox mask;
+            std::vector<std::pair<int,Box> > isects;
+            for (MFIter mfi(*rho_save[lev]); mfi.isValid(); ++mfi) {
+                const Box& bx = mfi.fabbox();
+                mask.resize(bx);
+                mask.setVal(0.0);
+                fba.intersections(bx, isects);
+                for (auto const& isect : isects) {
+                    mask.setVal(1.0, isect.second);
+                }
+                (*rho_save[lev])[mfi].mult(mask,0,0,1);
+            }
+
             rhoc[lev+1]->ParallelAdd(*rho_save[lev], 0, 0, nc, ngsrc, ngdst, period);
             MultiFab* pml_rho_cp = pml[lev+1]->Getrho_cp();
             if (pml_rho_cp) {
