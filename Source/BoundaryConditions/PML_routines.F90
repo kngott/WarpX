@@ -566,9 +566,9 @@ contains
     real(amrex_real), intent(in   ) :: Bx (Bxlo(1):Bxhi(1),Bxlo(2):Bxhi(2),2)
     real(amrex_real), intent(in   ) :: By (Bylo(1):Byhi(1),Bylo(2):Byhi(2),2)
     real(amrex_real), intent(in   ) :: Bz (Bzlo(1):Bzhi(1),Bzlo(2):Bzhi(2),2)
-    real(amrex_real), intent(inout) :: Jx (Jxlo(1):Jxhi(1),Jxlo(2):Jxhi(2))
-    real(amrex_real), intent(inout) :: Jy (Jylo(1):Jyhi(1),Jylo(2):Jyhi(2))
-    real(amrex_real), intent(inout) :: Jz (Jzlo(1):Jzhi(1),Jzlo(2):Jzhi(2))
+    real(amrex_real), intent(in   ) :: Jx (Jxlo(1):Jxhi(1),Jxlo(2):Jxhi(2))
+    real(amrex_real), intent(in   ) :: Jy (Jylo(1):Jyhi(1),Jylo(2):Jyhi(2))
+    real(amrex_real), intent(in   ) :: Jz (Jzlo(1):Jzhi(1),Jzlo(2):Jzhi(2))
 
     real(amrex_real), parameter :: half = 1.d0/2.d0
 
@@ -586,7 +586,7 @@ contains
        do i = ylo(1), yhi(1)
           Ey(i,k,1) = Ey(i,k,1) + dtsdz*(Bx(i  ,k  ,1)+Bx(i  ,k  ,2)  &
                &                        -Bx(i  ,k-1,1)-Bx(i  ,k-1,2)) &
-               &                - mudt * jy(i,k) * half
+               &                - mudt * Jy(i,k) * half
           Ey(i,k,2) = Ey(i,k,2) - dtsdx*(Bz(i  ,k  ,1)+Bz(i  ,k  ,2)  &
                &                        -Bz(i-1,k  ,1)-Bz(i-1,k  ,2)) &
                &                - mudt * Jy(i,k) * half
