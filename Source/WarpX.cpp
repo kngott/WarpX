@@ -368,6 +368,10 @@ WarpX::ReadParameters ()
         if (!do_pml) pml_has_particles = false;
         pp.query("pml_ncell", pml_ncell);
         pp.query("pml_delta", pml_delta);
+        pp.query("pml_ncell_coarse", pml_ncell_coarse);
+        pp.query("pml_delta_coarse", pml_delta_coarse);
+        if (pml_ncell_coarse <= 0) pml_ncell_coarse = pml_ncell;
+        if (pml_delta_coarse <= 0) pml_delta_coarse = pml_delta;
 
         pp.query("dump_openpmd", dump_openpmd);
         pp.query("dump_plotfiles", dump_openpmd);

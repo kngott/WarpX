@@ -329,7 +329,8 @@ MultiSigmaBox::ComputePMLFactorsE (const Real* dx, Real dt)
 
 PML::PML (const BoxArray& grid_ba, const DistributionMapping& grid_dm,
           const Geometry* geom, const Geometry* cgeom,
-          int ncell, int delta, int ref_ratio,
+          int ncell, int delta, int ncell_coarse, int delta_coarse,
+          int ref_ratio,
           int do_dive_cleaning, int do_moving_window, int has_particles)
     : m_geom(geom),
       m_cgeom(cgeom)
@@ -392,7 +393,7 @@ PML::PML (const BoxArray& grid_ba, const DistributionMapping& grid_dm,
 
         BoxArray grid_cba = grid_ba;
         grid_cba.coarsen(ref_ratio);
-        const BoxArray& cba = MakeBoxArray(*cgeom, grid_cba, ncell);
+        const BoxArray& cba = MakeBoxArray(*cgeom, grid_cba, ncell_coarse);
 
         DistributionMapping cdm{cba};
 
@@ -429,7 +430,7 @@ PML::PML (const BoxArray& grid_ba, const DistributionMapping& grid_dm,
             pml_rho_cp.reset(new MultiFab(amrex::convert(cba,IntVect::TheUnitVector()), cdm, 2, 0));
         }
 
-        sigba_cp.reset(new MultiSigmaBox(cba, cdm, grid_cba, cgeom->CellSize(), ncell, delta));
+        sigba_cp.reset(new MultiSigmaBox(cba, cdm, grid_cba, cgeom->CellSize(), ncell_coarse, delta_coarse));
     }
 
 }

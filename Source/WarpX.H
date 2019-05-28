@@ -463,6 +463,8 @@ private:
     int pml_has_particles = 0;
     int pml_ncell = 10;
     int pml_delta = 10;
+    int pml_ncell_coarse = -1; // if not set this will be the same as pml_ncell
+    int pml_delta_coarse = -1; // if not set this will be the same as pml_delta
     amrex::Vector<std::unique_ptr<PML> > pml;
     //
     amrex::Vector<std::array< std::unique_ptr<amrex::MultiFab>, 3 > > current_pml;

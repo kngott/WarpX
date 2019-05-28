@@ -133,7 +133,8 @@ WarpX::InitPML ()
     if (do_pml)
     {
         pml[0].reset(new PML(boxArray(0), DistributionMap(0), &Geom(0), nullptr,
-                             pml_ncell, pml_delta, 0,
+                             pml_ncell, pml_delta, pml_ncell_coarse, pml_delta_coarse,
+                             0,
                              do_dive_cleaning,
                              do_moving_window,
                              pml_has_particles));
@@ -141,7 +142,8 @@ WarpX::InitPML ()
         {
             pml[lev].reset(new PML(boxArray(lev), DistributionMap(lev),
                                    &Geom(lev), &Geom(lev-1),
-                                   pml_ncell, pml_delta, refRatio(lev-1)[0],
+                                   pml_ncell, pml_delta, pml_ncell_coarse, pml_delta_coarse,
+                                   refRatio(lev-1)[0],
                                    do_dive_cleaning,
                                    do_moving_window,
                                    pml_has_particles));
