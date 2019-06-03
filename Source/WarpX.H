@@ -23,9 +23,11 @@
 #include <PML.H>
 #include <BoostedFrameDiagnostic.H>
 #include <BilinearFilter.H>
+#include <NCIGodfreyFilter.H>
 
 #ifdef WARPX_USE_PSATD
 #include <fftw3.h>
+#include <SpectralSolver.H>
 #endif
 
 #if defined(BL_USE_SENSEI_INSITU)
@@ -93,12 +95,12 @@ public:
     static bool use_fdtd_nci_corr;
     static int  l_lower_order_in_v;
 
-    static bool use_laser;
     static bool use_filter;
     static bool serialize_ics;
 
     // Back transformation diagnostic
     static bool do_boosted_frame_diagnostic;
+    static std::string lab_data_directory;
     static int  num_snapshots_lab;
     static amrex::Real dt_snapshots_lab;
     static bool do_boosted_frame_fields;
@@ -108,6 +110,8 @@ public:
     static amrex::Real gamma_boost;
     static amrex::Real beta_boost;
     static amrex::Vector<int> boost_direction;
+    static amrex::Real zmax_plasma_to_compute_max_step;
+    static int do_compute_max_step_from_zmax;
 
     static bool do_dynamic_scheduling;
     static bool refine_plasma;
@@ -143,10 +147,23 @@ public:
 
     static amrex::IntVect filter_npass_each_dir;
     BilinearFilter bilinear_filter;
+    amrex::Vector< std::unique_ptr<NCIGodfreyFilter> > nci_godfrey_filter_exeybz;
+    amrex::Vector< std::unique_ptr<NCIGodfreyFilter> > nci_godfrey_filter_bxbyez;
+    
+    static int num_mirrors;
+    amrex::Vector<amrex::Real> mirror_z;
+    amrex::Vector<amrex::Real> mirror_z_width;
+    amrex::Vector<int> mirror_z_npoints;
+    
+    void applyMirrors(amrex::Real time);
 
     void ComputeDt ();
+    // Compute max_step automatically for simulations in a boosted frame.
+    void computeMaxStepBoostAccelerator(amrex::Geometry geom);
     int  MoveWindow (bool move_j);
     void UpdatePlasmaInjectionPosition (amrex::Real dt);
+
+    void ResetProbDomain (const amrex::RealBox& rb);
 
     void EvolveE (         amrex::Real dt);
     void EvolveE (int lev, amrex::Real dt);
@@ -227,6 +244,12 @@ public:
 
     static int do_moving_window;
     static int moving_window_dir;
+
+    // slice generation //
+    void InitializeSliceMultiFabs ();
+    void SliceGenerationForDiagnostics ();
+    void WriteSlicePlotFile () const;
+    void ClearSliceMultiFabs ();
 
 protected:
 
@@ -475,10 +498,10 @@ private:
     amrex::Real current_injection_position = 0;
 
     // Plasma injection parameters
-    int do_plasma_injection  = 0;
+    int warpx_do_continuous_injection = 0;
     int num_injected_species = -1;
     amrex::Vector<int> injected_plasma_species;
-
+    
     int do_electrostatic = 0;
     int n_buffer = 4;
     amrex::Real const_dt = 0.5e-11;
@@ -514,6 +537,9 @@ private:
     bool dump_plotfiles = true;
     bool dump_openpmd = false;
 #endif
+    bool plot_E_field       = true;
+    bool plot_B_field       = true;
+    bool plot_J_field       = true;
     bool plot_part_per_cell = true;
     bool plot_part_per_grid = false;
     bool plot_part_per_proc = false;
@@ -542,9 +568,17 @@ private:
 
     bool is_synchronized = true;
 
-    amrex::Vector<std::string> particle_plot_vars;
-    amrex::Vector<int> particle_plot_flags;
-    
+    //Slice Parameters
+    int slice_max_grid_size;
+    int slice_plot_int = -1;
+    amrex::RealBox slice_realbox;
+    amrex::IntVect slice_cr_ratio;
+    amrex::Vector<            std::unique_ptr<amrex::MultiFab>      > F_slice;
+    amrex::Vector<            std::unique_ptr<amrex::MultiFab>      > rho_slice;
+    amrex::Vector<std::array< std::unique_ptr<amrex::MultiFab>, 3 > > current_slice;
+    amrex::Vector<std::array< std::unique_ptr<amrex::MultiFab>, 3 > > Efield_slice;
+    amrex::Vector<std::array< std::unique_ptr<amrex::MultiFab>, 3 > > Bfield_slice;
+
 #ifdef WARPX_USE_PSATD
     // Store fields in real space on the dual grid (i.e. the grid for the FFT push of the fields)
     // This includes data for the FFT guard cells (between FFT groups)
@@ -592,6 +626,9 @@ private:
     amrex::Vector<std::unique_ptr<amrex::LayoutData<FFTData> > > dataptr_fp_fft;
     amrex::Vector<std::unique_ptr<amrex::LayoutData<FFTData> > > dataptr_cp_fft;
 
+    amrex::Vector<std::unique_ptr<SpectralSolver>> spectral_solver_fp;
+    amrex::Vector<std::unique_ptr<SpectralSolver>> spectral_solver_cp;
+
   // Domain decomposition containing the valid part of the dual grids (i.e. without FFT guard cells)
     amrex::Vector<amrex::BoxArray> ba_valid_fp_fft;
     amrex::Vector<amrex::BoxArray> ba_valid_cp_fft;
@@ -602,6 +639,7 @@ private:
     amrex::Vector<MPI_Comm> comm_fft;
     amrex::Vector<int>      color_fft;
 
+    bool fft_hybrid_mpi_decomposition = false;
     int ngroups_fft = 4;
     int fftw_plan_measure = 1;
     int nox_fft = 16;

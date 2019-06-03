@@ -12,6 +12,12 @@ ifeq ($(USE_GPU),TRUE)
   NVCC_HOST_COMP = gcc
 endif
 
+ifeq ($(USE_RZ),TRUE)
+  # DIM is set here so that it is properly set for
+  # all of the included files.
+  DIM = 2
+endif
+
 ifeq ($(USE_ASCENT_INSITU),TRUE)
   ASCENT_HOME ?= NOT_SET
   ifneq ($(ASCENT_HOME),NOT_SET)
@@ -35,7 +41,7 @@ endif
   CFLAGS   += -fPIC
   FFLAGS   += -fPIC
   F90FLAGS += -fPIC
-  USERSuffix = .Lib
+  USERSuffix := .Lib
   DEFINES += -DWARPX_USE_PY
 endif
 
@@ -101,7 +107,7 @@ ifeq ($(USE_PSATD),TRUE)
     INCLUDE_LOCATIONS += $(FFTW_HOME)/include
     LIBRARY_LOCATIONS += $(FFTW_HOME)/lib
   endif
-  USERSuffix += .PSATD
+  USERSuffix := $(USERSuffix).PSATD
   DEFINES += -DWARPX_USE_PSATD
   ifeq ($(USE_CUDA),TRUE)
     DEFINES += -DFFTW -DCUDA_FFT=1 # PICSAR uses it
@@ -112,8 +118,9 @@ ifeq ($(USE_PSATD),TRUE)
   endif
 endif
 
-ifeq ($(STORE_OLD_PARTICLE_ATTRIBS),TRUE)
-     DEFINES += -DWARPX_STORE_OLD_PARTICLE_ATTRIBS
+ifeq ($(USE_RZ),TRUE)
+  USERSuffix := $(USERSuffix).RZ
+  DEFINES += -DWARPX_RZ
 endif
 
 ifeq ($(DO_ELECTROSTATIC),TRUE)
@@ -147,17 +154,23 @@ else
   SHARED_OPTION = -shared
 endif
 
-installwarpx: libwarpx$(DIM)d.so
-	mv libwarpx$(DIM)d.so Python/pywarpx
-	cd Python; python setup.py install --with-libwarpx $(DIM) $(PYINSTALLOPTIONS)
+ifeq ($(USE_RZ),TRUE)
+  PYDIM = rz
+else
+  PYDIM = $(DIM)d
+endif
 
-libwarpx$(DIM)d.a: $(objForExecs)
+installwarpx: libwarpx$(PYDIM).so
+	mv libwarpx$(PYDIM).so Python/pywarpx
+	cd Python; python setup.py install --with-libwarpx $(PYDIM) $(PYINSTALLOPTIONS)
+
+libwarpx$(PYDIM).a: $(objForExecs)
 	@echo Making static library $@ ...
 	$(SILENT) $(AR) -crv $@ $^
 	$(SILENT) $(RM) AMReX_buildInfo.cpp
 	@echo SUCCESS
 
-libwarpx$(DIM)d.so: $(objForExecs)
+libwarpx$(PYDIM).so: $(objForExecs)
 	@echo Making dynamic library $@ ...
 	$(SILENT) $(CXX) $(SHARED_OPTION) -fPIC -o $@ $^ $(LDFLAGS) $(libraries)
 	$(SILENT) $(RM) AMReX_buildInfo.cpp

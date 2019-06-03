@@ -14,7 +14,9 @@ xmax = +20.e-6
 ymax = +20.e-6
 zmax = +20.e-6
 
-uniform_plasma = picmi.UniformDistribution(density=1.e25, upper_bound=[0., None, None], directed_velocity=[0.1, 0., 0.])
+uniform_plasma = picmi.UniformDistribution(density = 1.e25,
+                                           upper_bound = [0., None, None],
+                                           directed_velocity = [0.1*picmi.c, 0., 0.])
 
 electrons = picmi.Species(particle_type='electron', name='electrons', initial_distribution=uniform_plasma)
 
@@ -24,7 +26,7 @@ grid = picmi.Cartesian3DGrid(number_of_cells = [nx, ny, nz],
                              lower_boundary_conditions = ['periodic', 'periodic', 'periodic'],
                              upper_boundary_conditions = ['periodic', 'periodic', 'periodic'],
                              moving_window_velocity = [0., 0., 0.],
-                             warpx_max_grid_size=32, warpx_coord_sys=0)
+                             warpx_max_grid_size=32)
 
 solver = picmi.ElectromagneticSolver(grid=grid, cfl=1.)
 

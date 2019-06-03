@@ -17,7 +17,7 @@ number_sim_particles = 32768
 total_charge = 8.010883097437485e-07
 
 beam_rms_size = 0.25
-electron_beam_divergence = -0.04
+electron_beam_divergence = -0.04*picmi.c
 
 em_order = 3
 
@@ -26,7 +26,7 @@ grid = picmi.Cartesian3DGrid(number_of_cells = [nx, ny, nz],
                              upper_bound = [xmax, ymax, zmax],
                              lower_boundary_conditions = ['periodic', 'periodic', 'open'],
                              upper_boundary_conditions = ['periodic', 'periodic', 'open'],
-                             warpx_max_grid_size=16, warpx_coord_sys=0)
+                             warpx_max_grid_size=16)
 
 solver = picmi.ElectromagneticSolver(grid = grid,
                                      cfl = 1.,
