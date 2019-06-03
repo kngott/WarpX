@@ -786,7 +786,7 @@ WarpX::SyncRho (amrex::Vector<std::unique_ptr<amrex::MultiFab> >& rhof,
         }
     }
 
-    if (do_pml && pml_has_particles) {
+    if (do_pml && pml_has_particles && do_dive_cleaning) {
         for (int lev = 0; lev < finest_level; ++lev) {
             Periodicity period = Geom(lev+1).periodicity();
             IntVect ngsrc = rho_pml[lev]->nGrowVect();
