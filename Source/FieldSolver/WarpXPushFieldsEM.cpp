@@ -407,7 +407,7 @@ WarpX::EvolveF (int lev, PatchType patch_type, Real a_dt, DtType a_dt_type)
     BL_PROFILE("WarpX::EvolveF()");
 
     static constexpr Real mu_c2 = PhysConst::mu0*PhysConst::c*PhysConst::c;
-    const Real mu_c2_dt = mu_c2*dt;
+    const Real mu_c2_dt = mu_c2*a_dt;
 
     int patch_level = (patch_type == PatchType::fine) ? lev : lev-1;
     const auto& dx = WarpX::CellSize(patch_level);
