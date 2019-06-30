@@ -116,6 +116,8 @@ PhysicalParticleContainer::PhysicalParticleContainer (AmrCore* amr_core, int isp
             }
         }
     }
+    AddRealComp("ionization_level");
+    plot_flags.resize(PIdx::nattribs + 1, 1);
 }
 
 PhysicalParticleContainer::PhysicalParticleContainer (AmrCore* amr_core)
