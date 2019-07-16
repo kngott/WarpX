@@ -685,9 +685,16 @@ PhysicalParticleContainer::AddPlasmaGPU (int lev, RealBox part_realbox)
         const int ncells = overlap_box.numPts();
         const auto overlap_len = amrex::length(overlap_box);
 
+        if (plasma_injector->useRandom()) {
+            amrex::Gpu::streamSynchronize();
+            amrex::CheckSeedArraySizeAndResize(max_new_particles);
+        }
+
         amrex::For(max_new_particles, [=] AMREX_GPU_DEVICE (int ip) noexcept
         {
             ParticleType& p = pp[ip];
+            p.id() = pid+ip;
+            p.cpu() = cpuid;
             int cellid = ip/num_ppc;
             int i_part = ip - cellid*num_ppc;
             int k = cellid / (overlap_len.x*overlap_len.y);
@@ -709,12 +716,12 @@ PhysicalParticleContainer::AddPlasmaGPU (int lev, RealBox part_realbox)
             // Do I need to set every component?
             // Is setting pid to negative sufficient?
             if (!tile_realbox.contains(XDim3{x,y,z})) {
-                p.id() = -100;
+                p.id() = -1;
                 return;
             }
 #else
             if (!tile_realbox.contains(XDim3{x,z,0.0})) {
-                p.id() = -100;
+                p.id() = -1;
                 return;
             }
 #endif
@@ -740,7 +747,7 @@ PhysicalParticleContainer::AddPlasmaGPU (int lev, RealBox part_realbox)
                 // xmin, xmax, ymin, ymax, zmin, zmax, go to
                 // the next generated particle.
                 if (!injector->insideBounds(xb, yb, z)) {
-                    p.id() = -100;
+                    p.id() = -1;
                     return;
                 }
                 u = injector->getMomentum(x, y, z);
@@ -768,7 +775,7 @@ PhysicalParticleContainer::AddPlasmaGPU (int lev, RealBox part_realbox)
                 // If the particle is not within the lab-frame zmin, zmax, etc.
                 // go to the next generated particle.
                 if (!injector->insideBounds(xb, yb, z0_lab)) {
-                    p.id() = -100;
+                    p.id() = -1;
                     return;
                 }
                 // call `getDensity` with lab-frame parameters
@@ -811,8 +818,6 @@ PhysicalParticleContainer::AddPlasmaGPU (int lev, RealBox part_realbox)
             }
 #endif
 
-            p.id()  = pid+ip;
-            p.cpu() = cpuid;
 #if (AMREX_SPACEDIM == 3)
             p.pos(0) = x;
             p.pos(1) = y;

@@ -339,6 +339,11 @@ public:
 
     std::unique_ptr<GpuPlasmaInjector> makeGpuPlasmaInjector () const;
 
+    bool useRandom() const {
+        auto p = dynamic_cast<RandomPosition const*>(part_pos.get());
+        return p != nullptr;
+    }
+
     bool add_single_particle = false;
     amrex::Vector<amrex::Real> single_particle_pos;
     amrex::Vector<amrex::Real> single_particle_vel;
