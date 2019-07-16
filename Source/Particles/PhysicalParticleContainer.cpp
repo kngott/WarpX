@@ -571,6 +571,7 @@ PhysicalParticleContainer::AddPlasmaCPU (int lev, RealBox part_realbox)
 void
 PhysicalParticleContainer::AddPlasmaGPU (int lev, RealBox part_realbox)
 {
+#if 0
     BL_PROFILE("PhysicalParticleContainer::AddPlasmaGPU");
 
     // If no part_realbox is provided, initialize particles in the whole domain
@@ -841,6 +842,7 @@ PhysicalParticleContainer::AddPlasmaGPU (int lev, RealBox part_realbox)
             });
         }
     }
+#endif
 }
 #endif
 

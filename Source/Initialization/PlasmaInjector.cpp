@@ -55,184 +55,6 @@ namespace {
     }
 }
 
-ConstantDensityProfile::ConstantDensityProfile(Real density)
-    : _density(density)
-{}
-
-Real ConstantDensityProfile::getDensity(Real x, Real y, Real z) const
-{
-    return _density;
-}
-
-CustomDensityProfile::CustomDensityProfile(const std::string& species_name)
-{
-    ParmParse pp(species_name);
-    pp.getarr("custom_profile_params", params);
-}
-
-PredefinedDensityProfile::PredefinedDensityProfile(const std::string& species_name)
-{
-    ParmParse pp(species_name);
-    std::string which_profile_s;
-    pp.getarr("predefined_profile_params", params);
-    pp.query("predefined_profile_name", which_profile_s);
-    if (which_profile_s == "parabolic_channel"){
-        which_profile = predefined_profile_flag::parabolic_channel;
-    }
-}
-
-ParseDensityProfile::ParseDensityProfile(std::string parse_density_function)
-    : _parse_density_function(parse_density_function)
-{
-    parser_density.define(parse_density_function);
-    parser_density.registerVariables({"x","y","z"});
-
-    ParmParse pp("my_constants");
-    std::set<std::string> symbols = parser_density.symbols();
-    symbols.erase("x");
-    symbols.erase("y");
-    symbols.erase("z"); // after removing variables, we are left with constants
-    for (auto it = symbols.begin(); it != symbols.end(); ) {
-        Real v;
-        if (pp.query(it->c_str(), v)) {
-            parser_density.setConstant(*it, v);
-            it = symbols.erase(it);
-        } else {
-            ++it;
-        }
-    }
-    for (auto const& s : symbols) { // make sure there no unknown symbols
-        amrex::Abort("ParseDensityProfile: Unknown symbol "+s);
-    }
-}
-
-Real ParseDensityProfile::getDensity(Real x, Real y, Real z) const
-{
-    return parser_density.eval(x,y,z);
-}
-
-ConstantMomentumDistribution::ConstantMomentumDistribution(Real ux,
-                                                           Real uy,
-                                                           Real uz)
-    : _ux(ux), _uy(uy), _uz(uz)
-{}
-
-void ConstantMomentumDistribution::getMomentum(vec3& u, Real x, Real y, Real z) {
-    u[0] = _ux;
-    u[1] = _uy;
-    u[2] = _uz;
-}
-
-CustomMomentumDistribution::CustomMomentumDistribution(const std::string& species_name)
-{
-  ParmParse pp(species_name);
-  pp.getarr("custom_momentum_params", params);
-}
-
-GaussianRandomMomentumDistribution::GaussianRandomMomentumDistribution(Real ux_m,
-                                                                       Real uy_m,
-                                                                       Real uz_m,
-                                                                       Real ux_th,
-                                                                       Real uy_th,
-                                                                       Real uz_th)
-    : _ux_m(ux_m), _uy_m(uy_m), _uz_m(uz_m), _ux_th(ux_th), _uy_th(uy_th), _uz_th(uz_th)
-{
-}
-
-void GaussianRandomMomentumDistribution::getMomentum(vec3& u, Real x, Real y, Real z) {
-    Real ux_th = amrex::RandomNormal(0.0, _ux_th);
-    Real uy_th = amrex::RandomNormal(0.0, _uy_th);
-    Real uz_th = amrex::RandomNormal(0.0, _uz_th);
-
-    u[0] = _ux_m + ux_th;
-    u[1] = _uy_m + uy_th;
-    u[2] = _uz_m + uz_th;
-}
-RadialExpansionMomentumDistribution::RadialExpansionMomentumDistribution(Real u_over_r) : _u_over_r( u_over_r )
-{
-}
-
-void RadialExpansionMomentumDistribution::getMomentum(vec3& u, Real x, Real y, Real z) {
-  u[0] = _u_over_r * x;
-  u[1] = _u_over_r * y;
-  u[2] = _u_over_r * z;
-}
-
-ParseMomentumFunction::ParseMomentumFunction(std::string parse_momentum_function_ux,
-                                             std::string parse_momentum_function_uy,
-                                             std::string parse_momentum_function_uz)
-    : _parse_momentum_function_ux(parse_momentum_function_ux),
-      _parse_momentum_function_uy(parse_momentum_function_uy),
-      _parse_momentum_function_uz(parse_momentum_function_uz)
-{
-    parser_ux.define(parse_momentum_function_ux);
-    parser_uy.define(parse_momentum_function_uy);
-    parser_uz.define(parse_momentum_function_uz);
-
-    amrex::Array<std::reference_wrapper<WarpXParser>,3> parsers{parser_ux, parser_uy, parser_uz};
-    ParmParse pp("my_constants");
-    for (auto& p : parsers) {
-        auto& parser = p.get();
-        parser.registerVariables({"x","y","z"});
-        std::set<std::string> symbols = parser.symbols();
-        symbols.erase("x");
-        symbols.erase("y");
-        symbols.erase("z"); // after removing variables, we are left with constants
-        for (auto it = symbols.begin(); it != symbols.end(); ) {
-            Real v;
-            if (pp.query(it->c_str(), v)) {
-                parser.setConstant(*it, v);
-                it = symbols.erase(it);
-            } else {
-                ++it;
-            }
-        }
-        for (auto const& s : symbols) { // make sure there no unknown symbols
-            amrex::Abort("ParseMomentumFunction: Unknown symbol "+s);
-        }
-    }
-}
-
-void ParseMomentumFunction::getMomentum(vec3& u, Real x, Real y, Real z)
-{
-    u[0] = parser_ux.eval(x,y,z);
-    u[1] = parser_uy.eval(x,y,z);
-    u[2] = parser_uz.eval(x,y,z);
-}
-
-RandomPosition::RandomPosition(int num_particles_per_cell):
-  _num_particles_per_cell(num_particles_per_cell)
-{}
-
-void RandomPosition::getPositionUnitBox(vec3& r, int i_part, int ref_fac){
-    r[0] = amrex::Random();
-    r[1] = amrex::Random();
-    r[2] = amrex::Random();
-}
-
-RegularPosition::RegularPosition(const amrex::Vector<int>& num_particles_per_cell_each_dim)
-    : _num_particles_per_cell_each_dim(num_particles_per_cell_each_dim)
-{}
-
-void RegularPosition::getPositionUnitBox(vec3& r, int i_part, int ref_fac)
-{
-  int nx = ref_fac*_num_particles_per_cell_each_dim[0];
-  int ny = ref_fac*_num_particles_per_cell_each_dim[1];
-#if AMREX_SPACEDIM == 3
-  int nz = ref_fac*_num_particles_per_cell_each_dim[2];
-#else
-  int nz = 1;
-#endif
-  
-  int ix_part = i_part/(ny * nz);
-  int iy_part = (i_part % (ny * nz)) % ny;
-  int iz_part = (i_part % (ny * nz)) / ny;
-
-  r[0] = (0.5+ix_part)/nx;
-  r[1] = (0.5+iy_part)/ny;
-  r[2] = (0.5+iz_part)/nz;
-}
-
 PlasmaInjector::PlasmaInjector(){
     part_pos = NULL;
 }
@@ -426,6 +248,7 @@ Real PlasmaInjector::getDensity(Real x, Real y, Real z) {
     return rho_prof->getDensity(x, y, z);
 }
 
+#if 0
 std::unique_ptr<GpuPlasmaInjector>
 PlasmaInjector::makeGpuPlasmaInjector () const
 {
@@ -467,4 +290,5 @@ PlasmaInjector::makeGpuPlasmaInjector () const
 
     return r;
 }
+#endif
 
