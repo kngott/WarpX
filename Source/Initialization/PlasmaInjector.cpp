@@ -425,3 +425,46 @@ bool PlasmaInjector::insideBounds(Real x, Real y, Real z) {
 Real PlasmaInjector::getDensity(Real x, Real y, Real z) {
     return rho_prof->getDensity(x, y, z);
 }
+
+std::unique_ptr<GpuPlasmaInjector>
+PlasmaInjector::makeGpuPlasmaInjector () const
+{
+    std::unique_ptr<GpuPlasmaInjector> r;
+    
+    if (RandomPosition const* ppp =
+        dynamic_cast<RandomPosition const*>(part_pos.get()))
+    {
+        r->pos_type = GpuPlasmaInjector::PositionType::random;
+        r->ppc.x = ppp->_num_particles_per_cell;
+        r->ppc.y = r->ppc.z = 1;
+    } else if (RegularPosition const* ppp =
+               dynamic_cast<RegularPosition const*>(part_pos.get()))
+    {
+        r->pos_type = GpuPlasmaInjector::PositionType::regular;
+        r->ppc.x = ppp->_num_particles_per_cell_each_dim[0];
+        r->ppc.y = ppp->_num_particles_per_cell_each_dim[1];
+#if (AMREX_SPACEDIM == 3)
+        r->ppc.z = ppp->_num_particles_per_cell_each_dim[2];
+#else
+        r->ppc.z = 1;
+#endif
+    }
+    else
+    {
+        amrex::Abort("PlasmaInjector: Unknown PlasmaParticlePosition");
+    }
+
+    r->xmin = xmin;
+    r->ymin = ymin;
+    r->zmin = zmin;
+    r->xmax = xmax;
+    r->ymax = ymax;
+    r->zmax = zmax;
+
+#ifdef WARPX_RZ
+    r->radially_weighted = radially_weighted;
+#endif    
+
+    return r;
+}
+

@@ -3,12 +3,70 @@
 
 #include <array>
 
-#include "AMReX_REAL.H"
+#include <AMReX_REAL.H>
 #include <AMReX_Vector.H>
 #include <WarpXConst.H>
 #include <WarpXParser.H>
-#include "AMReX_ParmParse.H"
-#include "AMReX_Utility.H"
+#include <AMReX_ParmParse.H>
+#include <AMReX_Utility.H>
+#include <AMReX_Gpu.H>
+#include <AMReX_Dim3.H>
+
+struct GpuPlasmaInjector
+    : public amrex::Gpu::Managed
+{
+    enum struct PositionType { random, regular };
+
+    AMREX_GPU_HOST_DEVICE
+    amrex::XDim3 getPositionUnitBox (int i_part, int ref_fac=1) const noexcept {
+        switch (pos_type) {
+        case PositionType::random:
+        {
+            return amrex::XDim3{amrex::Random(), amrex::Random(), amrex::Random()};
+        }
+        default:
+        {
+            int nx = ref_fac*ppc.x;
+            int ny = ref_fac*ppc.y;
+#if (AMREX_SPACEDIM == 3)
+            int nz = ref_fac*ppc.z;
+#else
+            int nz = 1;
+#endif
+            int ix_part = i_part/(ny*nz);  // written this way backward compatibility
+            int iz_part = (i_part-ix_part*(ny*nz)) / ny;
+            int iy_part = (i_part-ix_part*(ny*nz)) - ny*iz_part;
+            return amrex::XDim3{(0.5+ix_part)/nx, (0.5+iy_part)/ny, (0.5+iz_part) / nz};
+        }
+        }
+    }
+
+    AMREX_GPU_HOST_DEVICE
+    bool insideBounds (amrex::Real x, amrex::Real y, amrex::Real z) const noexcept {
+        return true;
+    }
+
+    AMREX_GPU_HOST_DEVICE
+    amrex::Real getDensity (amrex::Real x, amrex::Real y, amrex::Real z) const noexcept {
+        return 1.0;
+    }
+
+    AMREX_GPU_HOST_DEVICE
+    amrex::XDim3 getMomentum (amrex::Real x, amrex::Real y, amrex::Real z) const noexcept {
+        amrex::XDim3 r;
+        return r;
+    }
+
+    PositionType pos_type;
+    amrex::Dim3 ppc;
+    amrex::Real xmin, xmax;
+    amrex::Real ymin, ymax;
+    amrex::Real zmin, zmax;
+
+#ifdef WARPX_RZ
+    bool radially_weighted;
+#endif    
+};
 
 enum class predefined_profile_flag { Null, parabolic_channel };
 
@@ -223,7 +281,7 @@ class RandomPosition : public PlasmaParticlePosition{
 public:
     RandomPosition(int num_particles_per_cell);
     virtual void getPositionUnitBox(vec3& r, int i_part, int ref_fac=1) override;
-private:
+//private:
     amrex::Real _x;
     amrex::Real _y;
     amrex::Real _z;
@@ -239,7 +297,7 @@ class RegularPosition : public PlasmaParticlePosition{
 public:
   RegularPosition(const amrex::Vector<int>& num_particles_per_cell_each_dim);
     virtual void getPositionUnitBox(vec3& r, int i_part, int ref_fac=1) override;
-private:
+//private:
   amrex::Real _x;
   amrex::Real _y;
   amrex::Real _z;
@@ -278,6 +336,8 @@ public:
     amrex::Real getMass() {return mass;}
 
     bool doInjection() { return part_pos != NULL;}
+
+    std::unique_ptr<GpuPlasmaInjector> makeGpuPlasmaInjector () const;
 
     bool add_single_particle = false;
     amrex::Vector<amrex::Real> single_particle_pos;

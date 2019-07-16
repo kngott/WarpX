@@ -582,7 +582,7 @@ PhysicalParticleContainer::AddPlasmaGPU (int lev, RealBox part_realbox)
     Real rmax = std::min(plasma_injector->xmax, part_realbox.hi(0));
 #endif
 
-    const Real* dx = geom.CellSize();
+    const auto dx = geom.CellSizeArray();
 
     Real scale_fac;
 #if AMREX_SPACEDIM==3
@@ -602,6 +602,8 @@ PhysicalParticleContainer::AddPlasmaGPU (int lev, RealBox part_realbox)
 
     MultiFab* cost = WarpX::getCosts(lev);
 
+#if 0
+    // xxxxx todo
     if ( (not m_refined_injection_mask) and WarpX::do_moving_window)
     {
         Box mask_box = geom.Domain();
@@ -610,235 +612,229 @@ PhysicalParticleContainer::AddPlasmaGPU (int lev, RealBox part_realbox)
         m_refined_injection_mask.reset( new IArrayBox(mask_box));
         m_refined_injection_mask->setVal(-1);
     }
-
-    MFItInfo info;
-    if (do_tiling) {
-        info.EnableTiling(tile_size);
-    }
-    info.SetDynamic(true);
-
-#ifdef _OPENMP
-#pragma omp parallel if (not WarpX::serialize_ics)
 #endif
+
+    GpuPlasmaInjector const* injector = getGpuPlasmaInjector();
+    Real gamma_boost = WarpX::gamma_boost;
+    Real beta_boost = WarpX::beta_boost;
+    Real t = WarpX::GetInstance().gett_new(lev);
+
+    // Loop through the tiles
+    for (MFIter mfi = MakeMFIter(lev); mfi.isValid(); ++mfi)
     {
-        std::array<Real,PIdx::nattribs> attribs;
-        attribs.fill(0.0);
+        Real wt = amrex::second();
 
-        // Loop through the tiles
-        for (MFIter mfi = MakeMFIter(lev, info); mfi.isValid(); ++mfi) {
+        const Box& tile_box = mfi.tilebox();
+        const RealBox tile_realbox = WarpX::getRealBox(tile_box, lev);
 
-            Real wt = amrex::second();
+        // Find the cells of part_box that overlap with tile_realbox
+        // If there is no overlap, just go to the next tile in the loop
+        RealBox overlap_realbox;
+        Box overlap_box;
+        Real ncells_adjust;
+        bool no_overlap = 0;
 
-            const Box& tile_box = mfi.tilebox();
-            const RealBox tile_realbox = WarpX::getRealBox(tile_box, lev);
-
-            // Find the cells of part_box that overlap with tile_realbox
-            // If there is no overlap, just go to the next tile in the loop
-            RealBox overlap_realbox;
-            Box overlap_box;
-            Real ncells_adjust;
-            bool no_overlap = 0;
-
-            for (int dir=0; dir<AMREX_SPACEDIM; dir++) {
-                if ( tile_realbox.lo(dir) <= part_realbox.hi(dir) ) {
-                    ncells_adjust = std::floor( (tile_realbox.lo(dir) - part_realbox.lo(dir))/dx[dir] );
-                    overlap_realbox.setLo( dir, part_realbox.lo(dir) + std::max(ncells_adjust, 0.) * dx[dir]);
-                } else {
-                    no_overlap = 1; break;
-                }
-                if ( tile_realbox.hi(dir) >= part_realbox.lo(dir) ) {
-                    ncells_adjust = std::floor( (part_realbox.hi(dir) - tile_realbox.hi(dir))/dx[dir] );
-                    overlap_realbox.setHi( dir, part_realbox.hi(dir) - std::max(ncells_adjust, 0.) * dx[dir]);
-                } else {
-                    no_overlap = 1; break;
-                }
-                // Count the number of cells in this direction in overlap_realbox
-                overlap_box.setSmall( dir, 0 );
-                overlap_box.setBig( dir,
-				    int( round((overlap_realbox.hi(dir)-overlap_realbox.lo(dir))/dx[dir] )) - 1);
+        for (int dir=0; dir<AMREX_SPACEDIM; dir++) {
+            if ( tile_realbox.lo(dir) <= part_realbox.hi(dir) ) {
+                ncells_adjust = std::floor( (tile_realbox.lo(dir) - part_realbox.lo(dir))/dx[dir] );
+                overlap_realbox.setLo( dir, part_realbox.lo(dir) + std::max(ncells_adjust, 0.) * dx[dir]);
+            } else {
+                no_overlap = 1; break;
             }
-            if (no_overlap == 1) {
-                continue; // Go to the next tile
+            if ( tile_realbox.hi(dir) >= part_realbox.lo(dir) ) {
+                ncells_adjust = std::floor( (part_realbox.hi(dir) - tile_realbox.hi(dir))/dx[dir] );
+                overlap_realbox.setHi( dir, part_realbox.hi(dir) - std::max(ncells_adjust, 0.) * dx[dir]);
+            } else {
+                no_overlap = 1; break;
             }
+            // Count the number of cells in this direction in overlap_realbox
+            overlap_box.setSmall( dir, 0 );
+            overlap_box.setBig( dir,
+                int( std::round((overlap_realbox.hi(dir)-overlap_realbox.lo(dir))
+                                /dx[dir] )) - 1);
+        }
+        if (no_overlap == 1) {
+            continue; // Go to the next tile
+        }
 
-            const int grid_id = mfi.index();
-            const int tile_id = mfi.LocalTileIndex();
+        const int grid_id = mfi.index();
+        const int tile_id = mfi.LocalTileIndex();
 
-	    Cuda::HostVector<ParticleType> host_particles;
-	    std::array<Cuda::HostVector<Real>, PIdx::nattribs> host_attribs;
-	    
-            // Loop through the cells of overlap_box and inject
-            // the corresponding particles
-            const auto& overlap_corner = overlap_realbox.lo();
-            for (IntVect iv = overlap_box.smallEnd(); iv <= overlap_box.bigEnd(); overlap_box.next(iv))
-            {
-                int fac;
-                if (do_continuous_injection) {
-#if ( AMREX_SPACEDIM == 3 )
-                    Real x = overlap_corner[0] + (iv[0] + 0.5)*dx[0];
-                    Real y = overlap_corner[1] + (iv[1] + 0.5)*dx[1];
-                    Real z = overlap_corner[2] + (iv[2] + 0.5)*dx[2];
-#elif ( AMREX_SPACEDIM == 2 )
-                    Real x = overlap_corner[0] + (iv[0] + 0.5)*dx[0];
-                    Real y = 0;
-                    Real z = overlap_corner[1] + (iv[1] + 0.5)*dx[1];
-#endif
-                    fac = GetRefineFac(x, y, z);
-                } else {
-                    fac = 1.0;
-                }
+        const int max_new_particles = overlap_box.numPts() * num_ppc;
+        const int pid = ParticleType::NextID();
+        ParticleType::NextID(pid+max_new_particles);
+        const int cpuid = ParallelDescriptor::MyProc();
 
-                int ref_num_ppc = num_ppc * AMREX_D_TERM(fac, *fac, *fac);
-                for (int i_part=0; i_part<ref_num_ppc;i_part++) {
-                    std::array<Real, 3> r;
-                    plasma_injector->getPositionUnitBox(r, i_part, fac);
-#if ( AMREX_SPACEDIM == 3 )
-                    Real x = overlap_corner[0] + (iv[0] + r[0])*dx[0];
-                    Real y = overlap_corner[1] + (iv[1] + r[1])*dx[1];
-                    Real z = overlap_corner[2] + (iv[2] + r[2])*dx[2];
-#elif ( AMREX_SPACEDIM == 2 )
-                    Real x = overlap_corner[0] + (iv[0] + r[0])*dx[0];
-                    Real y = 0;
-                    Real z = overlap_corner[1] + (iv[1] + r[1])*dx[1];
-#endif
-                    // If the new particle is not inside the tile box,
-                    // go to the next generated particle.
-#if ( AMREX_SPACEDIM == 3 )
-                    if(!tile_realbox.contains( RealVect{x, y, z} )) continue;
-#elif ( AMREX_SPACEDIM == 2 )
-                    if(!tile_realbox.contains( RealVect{x, z} )) continue;
-#endif
+        auto& particle_tile = GetParticles(lev)[std::make_pair(grid_id,tile_id)];
+        auto old_size = particle_tile.GetArrayOfStructs().size();
+        auto new_size = old_size + max_new_particles;
+        particle_tile.resize(new_size);
 
-                    // Save the x and y values to use in the insideBounds checks.
-                    // This is needed with WARPX_RZ since x and y are modified.
-                    Real xb = x;
-                    Real yb = y;
+        ParticleType* pp = particle_tile.GetArrayOfStructs()().data() + old_size;
+        auto& soa = particle_tile.GetStructOfArrays();
+        GpuArray<Real*,PIdx::nattribs> pa;
+        for (int ia = 0; ia < PIdx::nattribs; ++ia) {
+            pa[ia] = soa.GetRealData(ia).data() + old_size;
+        }
 
-#ifdef WARPX_RZ
-                    // Replace the x and y, choosing the angle randomly.
-                    // These x and y are used to get the momentum and density
-                    Real theta = 2.*MathConst::pi*amrex::Random();
-                    x = xb*std::cos(theta);
-                    y = xb*std::sin(theta);
-#endif
+        const GpuArray<Real,AMREX_SPACEDIM> overlap_corner 
+            {AMREX_D_DECL(overlap_realbox.lo(0),
+                          overlap_realbox.lo(1),
+                          overlap_realbox.lo(2))};
 
-                    Real dens;
-                    std::array<Real, 3> u;
-                    if (WarpX::gamma_boost == 1.){
-                      // Lab-frame simulation
-                      // If the particle is not within the species's
-                      // xmin, xmax, ymin, ymax, zmin, zmax, go to
-                      // the next generated particle.
-                      if (!plasma_injector->insideBounds(xb, yb, z)) continue;
-                      plasma_injector->getMomentum(u, x, y, z);
-                      dens = plasma_injector->getDensity(x, y, z);
-                    } else {
-                      // Boosted-frame simulation
-                      Real c = PhysConst::c;
-                      Real gamma_boost = WarpX::gamma_boost;
-                      Real beta_boost = WarpX::beta_boost;
-                      // Since the user provides the density distribution
-                      // at t_lab=0 and in the lab-frame coordinates,
-                      // we need to find the lab-frame position of this
-                      // particle at t_lab=0, from its boosted-frame coordinates
-                      // Assuming ballistic motion, this is given by:
-                      // z0_lab = gamma*( z_boost*(1-beta*betaz_lab) - ct_boost*(betaz_lab-beta) )
-                      // where betaz_lab is the speed of the particle in the lab frame
-                      //
-                      // In order for this equation to be solvable, betaz_lab
-                      // is explicitly assumed to have no dependency on z0_lab
-                      plasma_injector->getMomentum(u, x, y, 0.); // No z0_lab dependency
-                      // At this point u is the lab-frame momentum
-                      // => Apply the above formula for z0_lab
-                      Real gamma_lab = std::sqrt( 1 + (u[0]*u[0] + u[1]*u[1] + u[2]*u[2])/(c*c) );
-                      Real betaz_lab = u[2]/gamma_lab/c;
-                      Real t = WarpX::GetInstance().gett_new(lev);
-                      Real z0_lab = gamma_boost * ( z*(1-beta_boost*betaz_lab) - c*t*(betaz_lab-beta_boost) );
-                      // If the particle is not within the lab-frame zmin, zmax, etc.
-                      // go to the next generated particle.
-                      if (!plasma_injector->insideBounds(xb, yb, z0_lab)) continue;
-                      // call `getDensity` with lab-frame parameters
-                      dens = plasma_injector->getDensity(x, y, z0_lab);
-                      // At this point u and dens are the lab-frame quantities
-                      // => Perform Lorentz transform
-                      dens = gamma_boost * dens * ( 1 - beta_boost*betaz_lab );
-                      u[2] = gamma_boost * ( u[2] -beta_boost*c*gamma_lab );
-                    }
-                    Real weight = dens * scale_fac / (AMREX_D_TERM(fac, *fac, *fac));
-#ifdef WARPX_RZ
-                    if (plasma_injector->radially_weighted) {
-                      weight *= 2*MathConst::pi*xb;
-                    } else {
-                      // This is not correct since it might shift the particle
-                      // out of the local grid
-                      x = std::sqrt(xb*rmax);
-                      weight *= dx[0];
-                    }
-#endif
-                    attribs[PIdx::w ] = weight;
-                    attribs[PIdx::ux] = u[0];
-                    attribs[PIdx::uy] = u[1];
-                    attribs[PIdx::uz] = u[2];
+        const int ncells = overlap_box.numPts();
+        const auto overlap_len = amrex::length(overlap_box);
 
-                    // note - this will be slow on the GPU, need to revisit
-                    if (WarpX::do_boosted_frame_diagnostic && do_boosted_frame_diags)
-                    {
-                        auto& particle_tile = DefineAndReturnParticleTile(lev, grid_id, tile_id);
-                        particle_tile.push_back_real(particle_comps["xold"], x);
-                        particle_tile.push_back_real(particle_comps["yold"], y);
-                        particle_tile.push_back_real(particle_comps["zold"], z);
+        amrex::For(max_new_particles, [=] AMREX_GPU_DEVICE (int ip) noexcept
+        {
+            ParticleType& p = pp[ip];
+            int cellid = ip/num_ppc;
+            int i_part = ip - cellid*num_ppc;
+            int k = cellid / (overlap_len.x*overlap_len.y);
+            int j = (cellid-k*(overlap_len.x*overlap_len.y))/overlap_len.x;
+            int i = (cellid-k*(overlap_len.x*overlap_len.y)) - j*overlap_len.x;
 
-                        particle_tile.push_back_real(particle_comps["uxold"], u[0]);
-                        particle_tile.push_back_real(particle_comps["uyold"], u[1]);
-                        particle_tile.push_back_real(particle_comps["uzold"], u[2]);
-                    }
-
-		    ParticleType p;
-		    p.id()  = ParticleType::NextID();
-		    p.cpu() = ParallelDescriptor::MyProc();
+            const XDim3 r = injector->getPositionUnitBox(i_part, 1.0);
 #if (AMREX_SPACEDIM == 3)
-		    p.pos(0) = x;
-		    p.pos(1) = y;
-		    p.pos(2) = z;
+            Real x = overlap_corner[0] + (i+r.x)*dx[0];
+            Real y = overlap_corner[1] + (j+r.y)*dx[1];
+            Real z = overlap_corner[2] + (k+r.z)*dx[2];
+#else
+            Real x = overlap_corner[0] + (i+r.x)*dx[0];
+            Real y = 0.0;
+            Real z = overlap_corner[1] + (j+r.y)*dx[1];
+#endif
+
+#if (AMREX_SPACEDIM == 3)
+            // Do I need to set every component?
+            // Is setting pid to negative sufficient?
+            if (!tile_realbox.contains(XDim3{x,y,z})) {
+                p.id() = -100;
+                return;
+            }
+#else
+            if (!tile_realbox.contains(XDim3{x,z,0.0})) {
+                p.id() = -100;
+                return;
+            }
+#endif
+
+            // Save the x and y values to use in the insideBounds checks.
+            // This is needed with WARPX_RZ since x and y are modified.
+            Real xb = x;
+            Real yb = y;
+
+#ifdef WARPX_RZ
+            // Replace the x and y, choosing the angle randomly.
+            // These x and y are used to get the momentum and density
+            Real theta = 2.*MathConst::pi*amrex::Random();
+            x = xb*std::cos(theta);
+            y = xb*std::sin(theta);
+#endif
+    
+            Real dens;
+            XDim3 u;
+            if (gamma_boost == 1.){
+                // Lab-frame simulation
+                // If the particle is not within the species's
+                // xmin, xmax, ymin, ymax, zmin, zmax, go to
+                // the next generated particle.
+                if (!injector->insideBounds(xb, yb, z)) {
+                    p.id() = -100;
+                    return;
+                }
+                u = injector->getMomentum(x, y, z);
+                dens = injector->getDensity(x, y, z);
+            } else {
+                // Boosted-frame simulation
+                // Since the user provides the density distribution
+                // at t_lab=0 and in the lab-frame coordinates,
+                // we need to find the lab-frame position of this
+                // particle at t_lab=0, from its boosted-frame coordinates
+                // Assuming ballistic motion, this is given by:
+                // z0_lab = gamma*( z_boost*(1-beta*betaz_lab) - ct_boost*(betaz_lab-beta) )
+                // where betaz_lab is the speed of the particle in the lab frame
+                //
+                // In order for this equation to be solvable, betaz_lab
+                // is explicitly assumed to have no dependency on z0_lab
+                u = injector->getMomentum(x, y, 0.); // No z0_lab dependency
+                // At this point u is the lab-frame momentum
+                // => Apply the above formula for z0_lab
+                Real gamma_lab = std::sqrt( 1.+(u.x*u.x+u.y*u.y+u.z*u.z)
+                                            /(PhysConst::c*PhysConst::c) );
+                Real betaz_lab = u.z/(gamma_lab*PhysConst::c);
+                Real z0_lab = gamma_boost * ( z*(1-beta_boost*betaz_lab)
+                                              - PhysConst::c*t*(betaz_lab-beta_boost) );
+                // If the particle is not within the lab-frame zmin, zmax, etc.
+                // go to the next generated particle.
+                if (!injector->insideBounds(xb, yb, z0_lab)) {
+                    p.id() = -100;
+                    return;
+                }
+                // call `getDensity` with lab-frame parameters
+                dens = injector->getDensity(x, y, z0_lab);
+                // At this point u and dens are the lab-frame quantities
+                // => Perform Lorentz transform
+                dens = gamma_boost * dens * ( 1.0 - beta_boost*betaz_lab );
+                u.z = gamma_boost * ( u.z -beta_boost*PhysConst::c*gamma_lab );
+            }
+
+            // Real weight = dens * scale_fac / (AMREX_D_TERM(fac, *fac, *fac));
+            Real weight = dens * scale_fac;
+#ifdef WARPX_RZ
+            if (injector->radially_weighted) {
+                weight *= 2*MathConst::pi*xb;
+            } else {
+                // This is not correct since it might shift the particle
+                // out of the local grid
+                x = std::sqrt(xb*rmax);
+                weight *= dx[0];
+            }
+#endif
+            pa[PIdx::w ][ip] = weight;
+            pa[PIdx::ux][ip] = u.x;
+            pa[PIdx::uy][ip] = u.y;
+            pa[PIdx::uz][ip] = u.z;
+
+            // xxxxx todo: need to revisit
+#if 0
+            if (WarpX::do_boosted_frame_diagnostic && do_boosted_frame_diags)
+            {
+                auto& particle_tile = DefineAndReturnParticleTile(lev, grid_id, tile_id);
+                particle_tile.push_back_real(particle_comps["xold"], x);
+                particle_tile.push_back_real(particle_comps["yold"], y);
+                particle_tile.push_back_real(particle_comps["zold"], z);
+
+                particle_tile.push_back_real(particle_comps["uxold"], u[0]);
+                particle_tile.push_back_real(particle_comps["uyold"], u[1]);
+                particle_tile.push_back_real(particle_comps["uzold"], u[2]);
+            }
+#endif
+
+            p.id()  = pid+ip;
+            p.cpu() = cpuid;
+#if (AMREX_SPACEDIM == 3)
+            p.pos(0) = x;
+            p.pos(1) = y;
+            p.pos(2) = z;
 #elif (AMREX_SPACEDIM == 2)
 #ifdef WARPX_RZ
-                    attribs[PIdx::theta] = theta;
+            pa[PIdx::theta][ip] = theta;
 #endif
-		    p.pos(0) = xb;
-		    p.pos(1) = z;
+            p.pos(0) = xb;
+            p.pos(1) = z;
 #endif
-
-		    host_particles.push_back(p);
-		    for (int kk = 0; kk < PIdx::nattribs; ++kk)
-		      host_attribs[kk].push_back(attribs[kk]);
-                }
-            }
-
-	    auto& particle_tile = GetParticles(lev)[std::make_pair(grid_id,tile_id)];
-            auto old_size = particle_tile.GetArrayOfStructs().size();
-            auto new_size = old_size + host_particles.size();
-	    particle_tile.resize(new_size);
-
-            Cuda::thrust_copy(host_particles.begin(),
-                              host_particles.end(),
-                              particle_tile.GetArrayOfStructs().begin() + old_size);
-
-	    for (int kk = 0; kk < PIdx::nattribs; ++kk) {
-                Cuda::thrust_copy(host_attribs[kk].begin(),
-                                  host_attribs[kk].end(),
-                                  particle_tile.GetStructOfArrays().GetRealData(kk).begin() + old_size);
-	    }
+        });
 	    			 
-            if (cost) {
-	        wt = (amrex::second() - wt) / tile_box.d_numPts();
-                Array4<Real> const& costarr = cost->array(mfi);
-                amrex::ParallelFor(tile_box,
-                [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
-                {
-                    costarr(i,j,k) += wt;
-                });
-            }
-        }		
+        if (cost) {
+            wt = (amrex::second() - wt) / tile_box.d_numPts();
+            Array4<Real> const& costarr = cost->array(mfi);
+            amrex::ParallelFor(tile_box,
+            [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+            {
+                costarr(i,j,k) += wt;
+            });
+        }
     }
 }
 #endif
