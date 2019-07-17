@@ -3,7 +3,7 @@
 
 #include <AMReX_Gpu.H>
 #include <AMReX_Dim3.H>
-#include <WarpXParser.H>
+#include <GpuParser.H>
 
 enum struct InjectorDensityType { constant, custom, predefined, parser };
 
@@ -11,7 +11,7 @@ struct InjectorDensityConstant
 {
     InjectorDensityConstant (amrex::Real a_rho) noexcept : m_rho(a_rho) {}
 
-    AMREX_GPU_HOST_DEVICE
+    AMREX_GPU_DEVICE
     amrex::Real
     getDensity (amrex::Real, amrex::Real, amrex::Real) const noexcept
     {
@@ -24,14 +24,17 @@ private:
 
 struct InjectorDensityParser
 {
-    InjectorDensityParser (WarpXParser const& a_parser) noexcept {}
+    InjectorDensityParser (WarpXParser const& a_parser) noexcept
+        : m_parser(a_parser) {}
 
-    AMREX_GPU_HOST_DEVICE
+    AMREX_GPU_DEVICE
     amrex::Real
     getDensity (amrex::Real x, amrex::Real y, amrex::Real z) const noexcept
     {
-        return 0.0;
+        return m_parser(x,y,z);
     }
+
+    GpuParser m_parser;
 };
 
 struct InjectorDensity
@@ -53,7 +56,11 @@ struct InjectorDensity
                                          "InjectorDensity: must be type parser");
     }
 
-    AMREX_GPU_HOST_DEVICE
+    ~InjectorDensity ();
+
+    std::size_t sharedMemoryNeeded () const noexcept;
+
+    AMREX_GPU_DEVICE
     amrex::Real
     getDensity (amrex::Real x, amrex::Real y, amrex::Real z) const noexcept
     {

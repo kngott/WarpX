@@ -2,6 +2,31 @@
 
 using namespace amrex;
 
+InjectorDensity::~InjectorDensity ()
+{
+    switch (type)
+    {
+    case InjectorDensityType::parser:
+    {
+        object.parser.m_parser.clear();
+    }
+    }
+}
+
+std::size_t
+InjectorDensity::sharedMemoryNeeded () const noexcept
+{
+    switch (type)
+    {
+    case InjectorDensityType::parser:
+    {
+        return amrex::Gpu::numThreadsPerBlockParallelFor() * sizeof(double);
+    }
+    default:
+        return 0;
+    }
+}
+
 ConstantDensityProfile::ConstantDensityProfile(Real density)
     : _density(density)
 {}

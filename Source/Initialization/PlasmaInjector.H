@@ -80,6 +80,13 @@ public:
         return false;
     }
 
+    std::size_t
+    sharedMemoryNeeded () const noexcept {
+        return amrex::max(inj_pos->sharedMemoryNeeded(),
+                          inj_rho->sharedMemoryNeeded(),
+                          inj_mom->sharedMemoryNeeded());
+    }
+
 protected:
 
     amrex::Real mass, charge;

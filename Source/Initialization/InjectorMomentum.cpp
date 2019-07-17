@@ -2,6 +2,33 @@
 
 using namespace amrex;
 
+InjectorMomentum::~InjectorMomentum ()
+{
+    switch (type)
+    {
+    case InjectorMomentumType::parser:
+    {
+        object.parser.m_ux_parser.clear();
+        object.parser.m_uy_parser.clear();
+        object.parser.m_uz_parser.clear();
+    }
+    }
+}
+
+std::size_t
+InjectorMomentum::sharedMemoryNeeded () const noexcept
+{
+    switch (type)
+    {
+    case InjectorMomentumType::parser:
+    {
+        return amrex::Gpu::numThreadsPerBlockParallelFor() * sizeof(double);
+    }
+    default:
+        return 0;
+    }
+}
+
 ConstantMomentumDistribution::ConstantMomentumDistribution(Real ux,
                                                            Real uy,
                                                            Real uz)

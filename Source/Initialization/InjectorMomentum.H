@@ -3,7 +3,7 @@
 
 #include <AMReX_Gpu.H>
 #include <AMReX_Dim3.H>
-#include <WarpXParser.H>
+#include <GpuParser.H>
 
 enum struct InjectorMomentumType { constant, custom, gaussian, RadialExpansion, parser };
 
@@ -12,7 +12,7 @@ struct InjectorMomentumConstant
     InjectorMomentumConstant (amrex::Real a_ux, amrex::Real a_uy, amrex::Real a_uz) noexcept
         : m_ux(a_ux), m_uy(a_uy), m_uz(a_uz) {}
 
-    AMREX_GPU_HOST_DEVICE
+    AMREX_GPU_DEVICE
     amrex::XDim3
     getMomentum (amrex::Real, amrex::Real, amrex::Real) const noexcept
     {
@@ -27,15 +27,17 @@ struct InjectorMomentumParser
     InjectorMomentumParser (WarpXParser const& a_ux_parser,
                             WarpXParser const& a_uy_parser,
                             WarpXParser const& a_uz_parser) noexcept
-    {
-    }
+        : m_ux_parser(a_ux_parser), m_uy_parser(m_uy_parser),
+          m_uz_parser(a_uz_parser) {}
 
-    AMREX_GPU_HOST_DEVICE
+    AMREX_GPU_DEVICE
     amrex::XDim3
     getMomentum (amrex::Real x, amrex::Real y, amrex::Real z) const noexcept
     {
-        return {0.0,0.0,0.0};
+        return amrex::XDim3{m_ux_parser(x,y,z),m_uy_parser(x,y,z),m_uz_parser(x,y,z)};
     }
+
+    GpuParser m_ux_parser, m_uy_parser, m_uz_parser;
 };
 
 struct InjectorMomentum
@@ -59,7 +61,11 @@ struct InjectorMomentum
                                          "InjectorMomentum: must be type parser");
     }
 
-    AMREX_GPU_HOST_DEVICE
+    ~InjectorMomentum ();
+
+    std::size_t sharedMemoryNeeded () const noexcept;
+
+    AMREX_GPU_DEVICE
     amrex::XDim3
     getMomentum (amrex::Real x, amrex::Real y, amrex::Real z) const noexcept
     {

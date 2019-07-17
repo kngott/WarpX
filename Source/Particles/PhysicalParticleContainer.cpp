@@ -567,8 +567,7 @@ PhysicalParticleContainer::AddPlasmaCPU (int lev, RealBox part_realbox)
     }
 }
 
-//#ifdef AMREX_USE_GPU
-#if 1
+#ifdef AMREX_USE_GPU
 void
 PhysicalParticleContainer::AddPlasmaGPU (int lev, RealBox part_realbox)
 {
@@ -699,6 +698,8 @@ PhysicalParticleContainer::AddPlasmaGPU (int lev, RealBox part_realbox)
             amrex::CheckSeedArraySizeAndResize(max_new_particles);
         }
     
+        std::size_t shared_mem_bytes = plasma_injector->sharedMemoryNeeded();
+
         amrex::For(max_new_particles, [=] AMREX_GPU_DEVICE (int ip) noexcept
         {
             ParticleType& p = pp[ip];
@@ -838,7 +839,7 @@ PhysicalParticleContainer::AddPlasmaGPU (int lev, RealBox part_realbox)
             p.pos(0) = xb;
             p.pos(1) = z;
 #endif
-        });
+        }, shared_mem_bytes);
 	    			 
         if (cost) {
             wt = (amrex::second() - wt) / tile_box.d_numPts();

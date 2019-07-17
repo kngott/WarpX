@@ -9,7 +9,7 @@ enum struct InjectorPositionType { random, regular };
 
 struct InjectorPositionRandom
 {
-    AMREX_GPU_HOST_DEVICE
+    AMREX_GPU_DEVICE
     amrex::XDim3
     getPositionUnitBox (int i_part, int ref_fac=1) const noexcept
     {
@@ -21,7 +21,7 @@ struct InjectorPositionRegular
 {
     InjectorPositionRegular (amrex::Dim3 const& a_ppc) noexcept : ppc(a_ppc) {}
 
-    AMREX_GPU_HOST_DEVICE
+    AMREX_GPU_DEVICE
     amrex::XDim3
     getPositionUnitBox (int i_part, int ref_fac=1) const noexcept
     {
@@ -73,7 +73,10 @@ struct InjectorPosition
                                          "InjectorPosition: must be type regular");
     }
 
-    AMREX_GPU_HOST_DEVICE
+    std::size_t
+    sharedMemoryNeeded () const noexcept { return 0; }
+
+    AMREX_GPU_DEVICE
     amrex::XDim3
     getPositionUnitBox (int i_part, int ref_fac=1) const noexcept
     {
@@ -90,7 +93,7 @@ struct InjectorPosition
         };
     }
 
-    AMREX_GPU_HOST_DEVICE
+    AMREX_GPU_DEVICE
     bool
     insideBounds (amrex::Real x, amrex::Real y, amrex::Real z) const noexcept
     {
