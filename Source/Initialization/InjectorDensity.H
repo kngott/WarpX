@@ -7,6 +7,84 @@
 
 enum struct InjectorDensityType { constant, custom, predefined, parser };
 
+struct InjectorDensityConstant
+{
+    InjectorDensityConstant (amrex::Real a_rho) noexcept : m_rho(a_rho) {}
+
+    AMREX_GPU_HOST_DEVICE
+    amrex::Real
+    getDensity (amrex::Real, amrex::Real, amrex::Real) const noexcept
+    {
+        return m_rho;
+    }
+
+private:
+    amrex::Real m_rho;
+};
+
+struct InjectorDensityParser
+{
+    InjectorDensityParser (WarpXParser const& a_parser) noexcept {}
+
+    AMREX_GPU_HOST_DEVICE
+    amrex::Real
+    getDensity (amrex::Real x, amrex::Real y, amrex::Real z) const noexcept
+    {
+        return 0.0;
+    }
+};
+
+struct InjectorDensity
+    : public amrex::Gpu::Managed
+{
+    InjectorDensity (InjectorDensityType a_type, amrex::Real a_rho)
+        : object(a_rho),
+          type(a_type)
+    {
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(a_type == InjectorDensityType::constant,
+                                         "InjectorDensity: must be type constant");
+    }
+
+    InjectorDensity (InjectorDensityType a_type, WarpXParser const& a_parser)
+        : object(a_parser),
+          type(a_type)
+    {
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(a_type == InjectorDensityType::parser,
+                                         "InjectorDensity: must be type parser");
+    }
+
+    AMREX_GPU_HOST_DEVICE
+    amrex::Real
+    getDensity (amrex::Real x, amrex::Real y, amrex::Real z) const noexcept
+    {
+        switch (type)
+        {
+        case InjectorDensityType::parser:
+        {
+            return object.parser.getDensity(x,y,z);
+        }
+        case InjectorDensityType::constant:
+        {
+            return object.constant.getDensity(x,y,z);
+        }
+        default:
+        {
+            amrex::Abort("InjectorDensity: unknown type");
+            return 0.0;
+        }
+        }
+    }
+
+private:
+    union Object {
+        Object (amrex::Real a_rho) noexcept : constant(a_rho) {}
+        Object (WarpXParser const& a_parser) noexcept : parser(a_parser) {}
+        InjectorDensityConstant constant;
+        InjectorDensityParser   parser;
+    };
+    Object object;
+    InjectorDensityType type;
+};
 
 
 enum class predefined_profile_flag { Null, parabolic_channel };
@@ -39,7 +117,7 @@ public:
                                    amrex::Real y,
                                    amrex::Real z) const override;
 
-private:
+//private:
     amrex::Real _density;
 };
 
@@ -87,7 +165,7 @@ public:
     virtual amrex::Real getDensity(amrex::Real x,
                                    amrex::Real y,
                                    amrex::Real z) const override;
-private:
+//private:
     std::string _parse_density_function;
     WarpXParser parser_density;
 };

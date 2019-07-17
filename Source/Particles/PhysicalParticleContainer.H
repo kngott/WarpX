@@ -89,7 +89,8 @@ public:
     virtual void AddParticles (int lev);
     void AddPlasma(int lev, amrex::RealBox part_realbox = amrex::RealBox());
     void AddPlasmaCPU (int lev, amrex::RealBox part_realbox);
-#ifdef AMREX_USE_GPU
+//#ifdef AMREX_USE_GPU
+#if 1
     void AddPlasmaGPU (int lev, amrex::RealBox part_realbox);
 #endif
 

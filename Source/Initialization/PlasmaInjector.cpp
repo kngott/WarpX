@@ -248,47 +248,87 @@ Real PlasmaInjector::getDensity(Real x, Real y, Real z) {
     return rho_prof->getDensity(x, y, z);
 }
 
-#if 0
-std::unique_ptr<GpuPlasmaInjector>
-PlasmaInjector::makeGpuPlasmaInjector () const
+InjectorPosition*
+PlasmaInjector::getInjectorPosition ()
 {
-    std::unique_ptr<GpuPlasmaInjector> r;
-    
-    if (RandomPosition const* ppp =
-        dynamic_cast<RandomPosition const*>(part_pos.get()))
+    if (inj_pos == nullptr)
     {
-        r->pos_type = GpuPlasmaInjector::PositionType::random;
-        r->ppc.x = ppp->_num_particles_per_cell;
-        r->ppc.y = r->ppc.z = 1;
-    } else if (RegularPosition const* ppp =
-               dynamic_cast<RegularPosition const*>(part_pos.get()))
-    {
-        r->pos_type = GpuPlasmaInjector::PositionType::regular;
-        r->ppc.x = ppp->_num_particles_per_cell_each_dim[0];
-        r->ppc.y = ppp->_num_particles_per_cell_each_dim[1];
+        if (RandomPosition const* ppp =
+            dynamic_cast<RandomPosition const*>(part_pos.get()))
+        {
+            inj_pos.reset(new InjectorPosition(InjectorPositionType::random,
+                                               xmin, xmax, ymin, ymax, zmin, zmax));
+        }
+        else if (RegularPosition const* ppp =
+                 dynamic_cast<RegularPosition const*>(part_pos.get()))
+        {
+            inj_pos.reset(new InjectorPosition(InjectorPositionType::regular,
+                                               xmin, xmax, ymin, ymax, zmin, zmax,
+                                               Dim3{ppp->_num_particles_per_cell_each_dim[0],
+                                                    ppp->_num_particles_per_cell_each_dim[1],
 #if (AMREX_SPACEDIM == 3)
-        r->ppc.z = ppp->_num_particles_per_cell_each_dim[2];
+                                                    ppp->_num_particles_per_cell_each_dim[2]
 #else
-        r->ppc.z = 1;
+                                                    1.0;
 #endif
+                                               }));
+        }
+        else
+        {
+            amrex::Abort("PlasmaInjector::getInjectorPosition: how did this happend");
+        }
     }
-    else
-    {
-        amrex::Abort("PlasmaInjector: Unknown PlasmaParticlePosition");
-    }
-
-    r->xmin = xmin;
-    r->ymin = ymin;
-    r->zmin = zmin;
-    r->xmax = xmax;
-    r->ymax = ymax;
-    r->zmax = zmax;
-
-#ifdef WARPX_RZ
-    r->radially_weighted = radially_weighted;
-#endif    
-
-    return r;
+    return inj_pos.get();
 }
-#endif
+
+InjectorDensity*
+PlasmaInjector::getInjectorDensity ()
+{
+    if(inj_rho == nullptr)
+    {
+        if (ConstantDensityProfile const* p =
+            dynamic_cast<ConstantDensityProfile const*>(rho_prof.get()))
+        {
+            inj_rho.reset(new InjectorDensity(InjectorDensityType::constant,
+                                              p->_density));
+        }
+        else if (ParseDensityProfile const* p =
+                 dynamic_cast<ParseDensityProfile const*>(rho_prof.get()))
+        {
+            inj_rho.reset(new InjectorDensity(InjectorDensityType::parser,
+                                              p->parser_density));
+        }
+        else
+        {
+            amrex::Abort("PlasmaInjector::getInjectorDensity: how did this happen?");
+        }
+    }
+    return inj_rho.get();
+}
+
+InjectorMomentum*
+PlasmaInjector::getInjectorMomentum ()
+{
+    if (inj_mom == nullptr)
+    {
+        if (ConstantMomentumDistribution const* p =
+            dynamic_cast<ConstantMomentumDistribution const*>(mom_dist.get()))
+        {
+            inj_mom.reset(new InjectorMomentum(InjectorMomentumType::constant,
+                                              p->_ux, p->_uy, p->_uz));
+        }
+        else if (ParseMomentumFunction const* p =
+                 dynamic_cast<ParseMomentumFunction const*>(mom_dist.get()))
+        {
+            inj_mom.reset(new InjectorMomentum(InjectorMomentumType::parser,
+                                               p->parser_ux, p->parser_uy,
+                                               p->parser_uz));
+        }
+        else
+        {
+            amrex::Abort("PlasmaInjector::getInjectorMomentum: how did this happen?");
+        }
+    }
+    return inj_mom.get();
+}
 

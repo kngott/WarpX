@@ -72,6 +72,14 @@ public:
     amrex::Real ymin, ymax;
     amrex::Real zmin, zmax;
 
+    InjectorPosition* getInjectorPosition ();
+    InjectorDensity*  getInjectorDensity ();
+    InjectorMomentum* getInjectorMomentum ();
+
+    bool useRandom () const noexcept {
+        return false;
+    }
+
 protected:
 
     amrex::Real mass, charge;
@@ -84,6 +92,10 @@ protected:
     std::unique_ptr<PlasmaDensityProfile> rho_prof;
     std::unique_ptr<PlasmaMomentumDistribution> mom_dist;
     std::unique_ptr<PlasmaParticlePosition> part_pos;
+
+    std::unique_ptr<InjectorPosition> inj_pos;
+    std::unique_ptr<InjectorDensity > inj_rho;
+    std::unique_ptr<InjectorMomentum> inj_mom;
     
     void parseDensity(amrex::ParmParse pp);
     void parseMomentum(amrex::ParmParse pp);    

@@ -7,6 +7,94 @@
 
 enum struct InjectorMomentumType { constant, custom, gaussian, RadialExpansion, parser };
 
+struct InjectorMomentumConstant
+{
+    InjectorMomentumConstant (amrex::Real a_ux, amrex::Real a_uy, amrex::Real a_uz) noexcept
+        : m_ux(a_ux), m_uy(a_uy), m_uz(a_uz) {}
+
+    AMREX_GPU_HOST_DEVICE
+    amrex::XDim3
+    getMomentum (amrex::Real, amrex::Real, amrex::Real) const noexcept
+    {
+        return amrex::XDim3{m_ux,m_uy,m_uz};
+    }
+private:
+    amrex::Real m_ux, m_uy, m_uz;
+};
+
+struct InjectorMomentumParser
+{
+    InjectorMomentumParser (WarpXParser const& a_ux_parser,
+                            WarpXParser const& a_uy_parser,
+                            WarpXParser const& a_uz_parser) noexcept
+    {
+    }
+
+    AMREX_GPU_HOST_DEVICE
+    amrex::XDim3
+    getMomentum (amrex::Real x, amrex::Real y, amrex::Real z) const noexcept
+    {
+        return {0.0,0.0,0.0};
+    }
+};
+
+struct InjectorMomentum
+    : public amrex::Gpu::Managed
+{
+    InjectorMomentum (InjectorMomentumType a_type, amrex::Real a_ux,
+                      amrex::Real a_uy, amrex::Real a_uz)
+        : object(a_ux, a_uy, a_uz),
+          type(a_type)
+    {
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(a_type == InjectorMomentumType::constant,
+                                         "InjectorMomentum: must be type constant");
+    }
+
+    InjectorMomentum (InjectorMomentumType a_type, WarpXParser const& a_ux_parser,
+                      WarpXParser const& a_uy_parser, WarpXParser const& a_uz_parser)
+        : object(a_ux_parser, a_uy_parser, a_uz_parser),
+          type(a_type)
+    {
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(a_type == InjectorMomentumType::parser,
+                                         "InjectorMomentum: must be type parser");
+    }
+
+    AMREX_GPU_HOST_DEVICE
+    amrex::XDim3
+    getMomentum (amrex::Real x, amrex::Real y, amrex::Real z) const noexcept
+    {
+        switch (type)
+        {
+        case InjectorMomentumType::parser:
+        {
+            return object.parser.getMomentum(x,y,z);
+        }
+        case InjectorMomentumType::constant:
+        {
+            return object.constant.getMomentum(x,y,z);
+        }
+        default:
+        {
+            amrex::Abort("InjectorMomentum: unknown type");
+            return {0.0,0.0,0.0};
+        }
+        }
+    }
+
+private:
+    union Object {
+        Object (amrex::Real a_ux, amrex::Real a_uy, amrex::Real a_uz) noexcept
+            : constant(a_ux,a_uy,a_uz) {}
+        Object (WarpXParser const& a_ux_parser, WarpXParser const& a_uy_parser,
+                WarpXParser const& a_uz_parser) noexcept
+            : parser(a_ux_parser, a_uy_parser, a_uz_parser) {}
+        InjectorMomentumConstant constant;
+        InjectorMomentumParser   parser;
+    };
+    Object object;
+    InjectorMomentumType type;
+};
+
 
 ///
 /// PlasmaMomentumDistribution describes how the particle momenta
@@ -33,7 +121,7 @@ public:
                                  amrex::Real uz);
     virtual void getMomentum(vec3& u, amrex::Real x, amrex::Real y, amrex::Real z) override;
 
-private:
+//private:
     amrex::Real _ux;
     amrex::Real _uy;
     amrex::Real _uz;
@@ -107,7 +195,7 @@ public:
                              amrex::Real x,
                              amrex::Real y,
                              amrex::Real z) override;
-private:
+//private:
     std::string _parse_momentum_function_ux;
     std::string _parse_momentum_function_uy;
     std::string _parse_momentum_function_uz;

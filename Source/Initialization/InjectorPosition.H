@@ -19,6 +19,8 @@ struct InjectorPositionRandom
 
 struct InjectorPositionRegular
 {
+    InjectorPositionRegular (amrex::Dim3 const& a_ppc) noexcept : ppc(a_ppc) {}
+
     AMREX_GPU_HOST_DEVICE
     amrex::XDim3
     getPositionUnitBox (int i_part, int ref_fac=1) const noexcept
@@ -36,12 +38,41 @@ struct InjectorPositionRegular
         return amrex::XDim3{(0.5+ix_part)/nx, (0.5+iy_part)/ny, (0.5+iz_part) / nz};
     }
 private:
-    amrex::XDim3 ppc;
+    amrex::Dim3 ppc;
 };
 
 struct InjectorPosition
     : public amrex::Gpu::Managed
 {
+    InjectorPosition (InjectorPositionType a_type,
+                      amrex::Real a_xmin, amrex::Real a_xmax,
+                      amrex::Real a_ymin, amrex::Real a_ymax,
+                      amrex::Real a_zmin, amrex::Real a_zmax)
+        : object(),
+          type(a_type),
+          xmin(a_xmin), xmax(a_xmax),
+          ymin(a_ymin), ymax(a_ymax),
+          zmin(a_zmin), zmax(a_zmax)
+    {
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(a_type == InjectorPositionType::random,
+                                         "InjectorPosition: must be type random");
+    }
+
+    InjectorPosition (InjectorPositionType a_type,
+                      amrex::Real a_xmin, amrex::Real a_xmax,
+                      amrex::Real a_ymin, amrex::Real a_ymax,
+                      amrex::Real a_zmin, amrex::Real a_zmax,
+                      amrex::Dim3 const& a_ppc)
+        : object(a_ppc),
+          type(a_type),
+          xmin(a_xmin), xmax(a_xmax),
+          ymin(a_ymin), ymax(a_ymax),
+          zmin(a_zmin), zmax(a_zmax)
+    {
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(a_type == InjectorPositionType::regular,
+                                         "InjectorPosition: must be type regular");
+    }
+
     AMREX_GPU_HOST_DEVICE
     amrex::XDim3
     getPositionUnitBox (int i_part, int ref_fac=1) const noexcept
@@ -68,11 +99,14 @@ struct InjectorPosition
                 z < zmax and z >= zmin);
     }
 
-    union object_t {
+private:
+    union Object {
+        Object () noexcept : random() {}
+        Object (amrex::Dim3 const& a_ppc) noexcept : regular(a_ppc) {}
         InjectorPositionRandom random;
         InjectorPositionRegular regular;
     };
-    object_t object;
+    Object object;
     InjectorPositionType type;
     amrex::Real xmin, xmax;
     amrex::Real ymin, ymax;

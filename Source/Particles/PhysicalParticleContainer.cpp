@@ -567,11 +567,11 @@ PhysicalParticleContainer::AddPlasmaCPU (int lev, RealBox part_realbox)
     }
 }
 
-#ifdef AMREX_USE_GPU
+//#ifdef AMREX_USE_GPU
+#if 1
 void
 PhysicalParticleContainer::AddPlasmaGPU (int lev, RealBox part_realbox)
 {
-#if 0
     BL_PROFILE("PhysicalParticleContainer::AddPlasmaGPU");
 
     // If no part_realbox is provided, initialize particles in the whole domain
@@ -615,10 +615,18 @@ PhysicalParticleContainer::AddPlasmaGPU (int lev, RealBox part_realbox)
     }
 #endif
 
-    GpuPlasmaInjector const* injector = getGpuPlasmaInjector();
+    // xxxxx todo random
+
+    InjectorPosition* inj_pos = plasma_injector->getInjectorPosition();
+    InjectorDensity*  inj_rho = plasma_injector->getInjectorDensity();
+    InjectorMomentum* inj_mom = plasma_injector->getInjectorMomentum();
     Real gamma_boost = WarpX::gamma_boost;
     Real beta_boost = WarpX::beta_boost;
     Real t = WarpX::GetInstance().gett_new(lev);
+
+#ifdef WARPX_RZ
+    bool radially_weighted = plasma_injector->radially_weighted;
+#endif
 
     // Loop through the tiles
     for (MFIter mfi = MakeMFIter(lev); mfi.isValid(); ++mfi)
@@ -690,7 +698,7 @@ PhysicalParticleContainer::AddPlasmaGPU (int lev, RealBox part_realbox)
             amrex::Gpu::streamSynchronize();
             amrex::CheckSeedArraySizeAndResize(max_new_particles);
         }
-
+    
         amrex::For(max_new_particles, [=] AMREX_GPU_DEVICE (int ip) noexcept
         {
             ParticleType& p = pp[ip];
@@ -702,7 +710,7 @@ PhysicalParticleContainer::AddPlasmaGPU (int lev, RealBox part_realbox)
             int j = (cellid-k*(overlap_len.x*overlap_len.y))/overlap_len.x;
             int i = (cellid-k*(overlap_len.x*overlap_len.y)) - j*overlap_len.x;
 
-            const XDim3 r = injector->getPositionUnitBox(i_part, 1.0);
+            const XDim3 r = inj_pos->getPositionUnitBox(i_part, 1.0);
 #if (AMREX_SPACEDIM == 3)
             Real x = overlap_corner[0] + (i+r.x)*dx[0];
             Real y = overlap_corner[1] + (j+r.y)*dx[1];
@@ -747,12 +755,12 @@ PhysicalParticleContainer::AddPlasmaGPU (int lev, RealBox part_realbox)
                 // If the particle is not within the species's
                 // xmin, xmax, ymin, ymax, zmin, zmax, go to
                 // the next generated particle.
-                if (!injector->insideBounds(xb, yb, z)) {
+                if (!inj_pos->insideBounds(xb, yb, z)) {
                     p.id() = -1;
                     return;
                 }
-                u = injector->getMomentum(x, y, z);
-                dens = injector->getDensity(x, y, z);
+                u = inj_mom->getMomentum(x, y, z);
+                dens = inj_rho->getDensity(x, y, z);
             } else {
                 // Boosted-frame simulation
                 // Since the user provides the density distribution
@@ -765,7 +773,7 @@ PhysicalParticleContainer::AddPlasmaGPU (int lev, RealBox part_realbox)
                 //
                 // In order for this equation to be solvable, betaz_lab
                 // is explicitly assumed to have no dependency on z0_lab
-                u = injector->getMomentum(x, y, 0.); // No z0_lab dependency
+                u = inj_mom->getMomentum(x, y, 0.); // No z0_lab dependency
                 // At this point u is the lab-frame momentum
                 // => Apply the above formula for z0_lab
                 Real gamma_lab = std::sqrt( 1.+(u.x*u.x+u.y*u.y+u.z*u.z)
@@ -775,12 +783,12 @@ PhysicalParticleContainer::AddPlasmaGPU (int lev, RealBox part_realbox)
                                               - PhysConst::c*t*(betaz_lab-beta_boost) );
                 // If the particle is not within the lab-frame zmin, zmax, etc.
                 // go to the next generated particle.
-                if (!injector->insideBounds(xb, yb, z0_lab)) {
+                if (!inj_pos->insideBounds(xb, yb, z0_lab)) {
                     p.id() = -1;
                     return;
                 }
                 // call `getDensity` with lab-frame parameters
-                dens = injector->getDensity(x, y, z0_lab);
+                dens = inj_rho->getDensity(x, y, z0_lab);
                 // At this point u and dens are the lab-frame quantities
                 // => Perform Lorentz transform
                 dens = gamma_boost * dens * ( 1.0 - beta_boost*betaz_lab );
@@ -790,7 +798,7 @@ PhysicalParticleContainer::AddPlasmaGPU (int lev, RealBox part_realbox)
             // Real weight = dens * scale_fac / (AMREX_D_TERM(fac, *fac, *fac));
             Real weight = dens * scale_fac;
 #ifdef WARPX_RZ
-            if (injector->radially_weighted) {
+            if (radially_weighted) {
                 weight *= 2*MathConst::pi*xb;
             } else {
                 // This is not correct since it might shift the particle
@@ -842,7 +850,6 @@ PhysicalParticleContainer::AddPlasmaGPU (int lev, RealBox part_realbox)
             });
         }
     }
-#endif
 }
 #endif
 
