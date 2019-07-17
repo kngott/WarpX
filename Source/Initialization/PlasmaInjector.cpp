@@ -324,6 +324,13 @@ PlasmaInjector::getInjectorMomentum ()
                                                p->parser_ux, p->parser_uy,
                                                p->parser_uz));
         }
+        else if (GaussianRandomMomentumDistribution const* p =
+                 dynamic_cast<GaussianRandomMomentumDistribution const*>(mom_dist.get()))
+        {
+            inj_mom.reset(new InjectorMomentum(InjectorMomentumType::gaussian,
+                                               p->_ux_m, p->_uy_m, p->_uz_m,
+                                               p->_ux_th, p->_uy_th, p->_uz_th));
+        }
         else
         {
             amrex::Abort("PlasmaInjector::getInjectorMomentum: how did this happen?");

@@ -59,6 +59,7 @@ struct InjectorDensity
     ~InjectorDensity ();
 
     std::size_t sharedMemoryNeeded () const noexcept;
+    bool useRandom () const noexcept { return false; }
 
     AMREX_GPU_DEVICE
     amrex::Real

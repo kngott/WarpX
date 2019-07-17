@@ -22,6 +22,28 @@ private:
     amrex::Real m_ux, m_uy, m_uz;
 };
 
+struct InjectorMomentumGaussian
+{
+    InjectorMomentumGaussian (amrex::Real a_ux_m, amrex::Real a_uy_m,
+                              amrex::Real a_uz_m, amrex::Real a_ux_th,
+                              amrex::Real a_uy_th, amrex::Real a_uz_th) noexcept
+        : m_ux_m(a_ux_m), m_uy_m(a_uy_m), m_uz_m(a_uz_m),
+          m_ux_th(a_ux_th), m_uy_th(a_uy_th), m_uz_th(a_uz_th)
+        {}
+
+    AMREX_GPU_DEVICE
+    amrex::XDim3
+    getMomentum (amrex::Real x, amrex::Real y, amrex::Real z) const noexcept
+    {
+        return amrex::XDim3{amrex::RandomNormal(m_ux_m, m_ux_th),
+                            amrex::RandomNormal(m_uy_m, m_uy_th),
+                            amrex::RandomNormal(m_uz_m, m_uz_th)};
+    }
+private:
+    amrex::Real m_ux_m, m_uy_m, m_uz_m;
+    amrex::Real m_ux_th, m_uy_th, m_uz_th;
+};
+
 struct InjectorMomentumParser
 {
     InjectorMomentumParser (WarpXParser const& a_ux_parser,
@@ -61,9 +83,21 @@ struct InjectorMomentum
                                          "InjectorMomentum: must be type parser");
     }
 
+    InjectorMomentum (InjectorMomentumType a_type, amrex::Real a_ux_m,
+                      amrex::Real a_uy_m, amrex::Real a_uz_m, amrex::Real a_ux_th,
+                      amrex::Real a_uy_th, amrex::Real a_uz_th)
+        : object(a_ux_m,a_uy_m,a_uz_m,a_ux_th,a_uy_th,a_uz_th),
+          type(a_type)
+    {
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(a_type == InjectorMomentumType::gaussian,
+                                         "InjectorMomentum: must be type gaussian");
+    }
+
     ~InjectorMomentum ();
 
     std::size_t sharedMemoryNeeded () const noexcept;
+
+    bool useRandom () const noexcept;
 
     AMREX_GPU_DEVICE
     amrex::XDim3
@@ -74,6 +108,10 @@ struct InjectorMomentum
         case InjectorMomentumType::parser:
         {
             return object.parser.getMomentum(x,y,z);
+        }
+        case InjectorMomentumType::gaussian:
+        {
+            return object.gaussian.getMomentum(x,y,z);
         }
         case InjectorMomentumType::constant:
         {
@@ -91,10 +129,15 @@ private:
     union Object {
         Object (amrex::Real a_ux, amrex::Real a_uy, amrex::Real a_uz) noexcept
             : constant(a_ux,a_uy,a_uz) {}
+        Object (amrex::Real a_ux_m, amrex::Real a_uy_m,
+                amrex::Real a_uz_m, amrex::Real a_ux_th,
+                amrex::Real a_uy_th, amrex::Real a_uz_th) noexcept
+            : gaussian(a_ux_m,a_uy_m,a_uz_m,a_ux_th,a_uy_th,a_uz_th) {}
         Object (WarpXParser const& a_ux_parser, WarpXParser const& a_uy_parser,
                 WarpXParser const& a_uz_parser) noexcept
             : parser(a_ux_parser, a_uy_parser, a_uz_parser) {}
         InjectorMomentumConstant constant;
+        InjectorMomentumGaussian gaussian;
         InjectorMomentumParser   parser;
     };
     Object object;
@@ -166,7 +209,7 @@ public:
                                        amrex::Real uy_th,
                                        amrex::Real uz_th);
     virtual void getMomentum(vec3& u, amrex::Real x, amrex::Real y, amrex::Real z) override;
-private:
+//private:
     amrex::Real _ux_m;
     amrex::Real _uy_m;
     amrex::Real _uz_m;

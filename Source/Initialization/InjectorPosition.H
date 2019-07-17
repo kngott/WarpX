@@ -73,8 +73,9 @@ struct InjectorPosition
                                          "InjectorPosition: must be type regular");
     }
 
-    std::size_t
-    sharedMemoryNeeded () const noexcept { return 0; }
+    std::size_t sharedMemoryNeeded () const noexcept { return 0; }
+
+    bool useRandom () const noexcept;
 
     AMREX_GPU_DEVICE
     amrex::XDim3

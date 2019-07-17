@@ -77,7 +77,8 @@ public:
     InjectorMomentum* getInjectorMomentum ();
 
     bool useRandom () const noexcept {
-        return false;
+        return inj_pos->useRandom() or inj_rho->useRandom()
+            or inj_mom->useRandom();
     }
 
     std::size_t

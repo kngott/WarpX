@@ -2,6 +2,22 @@
 
 using namespace amrex;
 
+bool
+InjectorPosition::useRandom () const noexcept
+{
+    switch (type)
+    {
+    case InjectorPositionType::random:
+    {
+        return true;
+    }
+    default:
+    {
+        return false;
+    }
+    };
+}
+
 RandomPosition::RandomPosition(int num_particles_per_cell):
   _num_particles_per_cell(num_particles_per_cell)
 {}

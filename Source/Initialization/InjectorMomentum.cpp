@@ -29,6 +29,20 @@ InjectorMomentum::sharedMemoryNeeded () const noexcept
     }
 }
 
+bool
+InjectorMomentum::useRandom () const noexcept
+{
+    switch (type)
+    {
+    case InjectorMomentumType::gaussian:
+    {
+        return true;
+    }
+    default:
+        return false;
+    }
+}
+
 ConstantMomentumDistribution::ConstantMomentumDistribution(Real ux,
                                                            Real uy,
                                                            Real uz)
