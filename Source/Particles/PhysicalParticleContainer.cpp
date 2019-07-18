@@ -674,15 +674,30 @@ PhysicalParticleContainer::AddPlasmaGPU (int lev, RealBox part_realbox)
         const int cpuid = ParallelDescriptor::MyProc();
 
         auto& particle_tile = GetParticles(lev)[std::make_pair(grid_id,tile_id)];
+        bool do_boosted = false;
+        if (WarpX::do_boosted_frame_diagnostic && do_boosted_frame_diags) {
+            do_boosted = true;
+            DefineAndReturnParticleTile(lev, grid_id, tile_id);
+        }
         auto old_size = particle_tile.GetArrayOfStructs().size();
         auto new_size = old_size + max_new_particles;
         particle_tile.resize(new_size);
+
 
         ParticleType* pp = particle_tile.GetArrayOfStructs()().data() + old_size;
         auto& soa = particle_tile.GetStructOfArrays();
         GpuArray<Real*,PIdx::nattribs> pa;
         for (int ia = 0; ia < PIdx::nattribs; ++ia) {
             pa[ia] = soa.GetRealData(ia).data() + old_size;
+        }
+        GpuArray<Real*,6> pb;
+        if (do_boosted) {
+            pb[0] = soa.GetRealData(particle_comps[ "xold"]).data() + old_size;
+            pb[1] = soa.GetRealData(particle_comps[ "yold"]).data() + old_size;
+            pb[2] = soa.GetRealData(particle_comps[ "zold"]).data() + old_size;
+            pb[3] = soa.GetRealData(particle_comps["uxold"]).data() + old_size;
+            pb[4] = soa.GetRealData(particle_comps["uyold"]).data() + old_size;
+            pb[5] = soa.GetRealData(particle_comps["uzold"]).data() + old_size;
         }
 
         const GpuArray<Real,AMREX_SPACEDIM> overlap_corner 
@@ -813,20 +828,14 @@ PhysicalParticleContainer::AddPlasmaGPU (int lev, RealBox part_realbox)
             pa[PIdx::uy][ip] = u.y;
             pa[PIdx::uz][ip] = u.z;
 
-            // xxxxx todo: need to revisit
-#if 0
-            if (WarpX::do_boosted_frame_diagnostic && do_boosted_frame_diags)
-            {
-                auto& particle_tile = DefineAndReturnParticleTile(lev, grid_id, tile_id);
-                particle_tile.push_back_real(particle_comps["xold"], x);
-                particle_tile.push_back_real(particle_comps["yold"], y);
-                particle_tile.push_back_real(particle_comps["zold"], z);
-
-                particle_tile.push_back_real(particle_comps["uxold"], u[0]);
-                particle_tile.push_back_real(particle_comps["uyold"], u[1]);
-                particle_tile.push_back_real(particle_comps["uzold"], u[2]);
+            if (do_boosted) {
+                pb[0][ip] = x;
+                pb[1][ip] = y;
+                pb[2][ip] = z;
+                pb[3][ip] = u.x;
+                pb[4][ip] = u.y;
+                pb[5][ip] = u.z;
             }
-#endif
 
 #if (AMREX_SPACEDIM == 3)
             p.pos(0) = x;

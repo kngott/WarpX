@@ -49,7 +49,7 @@ struct InjectorMomentumParser
     InjectorMomentumParser (WarpXParser const& a_ux_parser,
                             WarpXParser const& a_uy_parser,
                             WarpXParser const& a_uz_parser) noexcept
-        : m_ux_parser(a_ux_parser), m_uy_parser(m_uy_parser),
+        : m_ux_parser(a_ux_parser), m_uy_parser(a_uy_parser),
           m_uz_parser(a_uz_parser) {}
 
     AMREX_GPU_DEVICE
