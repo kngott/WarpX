@@ -5,11 +5,9 @@
 #include <AMReX_Dim3.H>
 #include <AMReX_Utility.H>
 
-enum struct InjectorPositionType { random, regular };
-
 struct InjectorPositionRandom
 {
-    AMREX_GPU_DEVICE
+    AMREX_GPU_HOST_DEVICE
     amrex::XDim3
     getPositionUnitBox (int i_part, int ref_fac=1) const noexcept
     {
@@ -21,7 +19,7 @@ struct InjectorPositionRegular
 {
     InjectorPositionRegular (amrex::Dim3 const& a_ppc) noexcept : ppc(a_ppc) {}
 
-    AMREX_GPU_DEVICE
+    AMREX_GPU_HOST_DEVICE
     amrex::XDim3
     getPositionUnitBox (int i_part, int ref_fac=1) const noexcept
     {
@@ -44,46 +42,45 @@ private:
 struct InjectorPosition
     : public amrex::Gpu::Managed
 {
-    InjectorPosition (InjectorPositionType a_type,
+    InjectorPosition (InjectorPositionRandom* t,
                       amrex::Real a_xmin, amrex::Real a_xmax,
                       amrex::Real a_ymin, amrex::Real a_ymax,
                       amrex::Real a_zmin, amrex::Real a_zmax)
-        : object(),
-          type(a_type),
+        : type(Type::random),
+          object(t),
           xmin(a_xmin), xmax(a_xmax),
           ymin(a_ymin), ymax(a_ymax),
           zmin(a_zmin), zmax(a_zmax)
-    {
-        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(a_type == InjectorPositionType::random,
-                                         "InjectorPosition: must be type random");
-    }
+    { }
 
-    InjectorPosition (InjectorPositionType a_type,
+    InjectorPosition (InjectorPositionRegular* t,
                       amrex::Real a_xmin, amrex::Real a_xmax,
                       amrex::Real a_ymin, amrex::Real a_ymax,
                       amrex::Real a_zmin, amrex::Real a_zmax,
                       amrex::Dim3 const& a_ppc)
-        : object(a_ppc),
-          type(a_type),
+        : type(Type::regular),
+          object(t, a_ppc),
           xmin(a_xmin), xmax(a_xmax),
           ymin(a_ymin), ymax(a_ymax),
           zmin(a_zmin), zmax(a_zmax)
-    {
-        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(a_type == InjectorPositionType::regular,
-                                         "InjectorPosition: must be type regular");
-    }
+    { }
+
+    InjectorPosition (InjectorPosition const&) = delete;
+    InjectorPosition (InjectorPosition&&) = delete;
+    void operator= (InjectorPosition const&) = delete;
+    void operator= (InjectorPosition &&) = delete;
 
     std::size_t sharedMemoryNeeded () const noexcept { return 0; }
 
     bool useRandom () const noexcept;
 
-    AMREX_GPU_DEVICE
+    AMREX_GPU_HOST_DEVICE
     amrex::XDim3
     getPositionUnitBox (int i_part, int ref_fac=1) const noexcept
     {
         switch (type)
         {
-        case InjectorPositionType::regular:
+        case Type::regular:
         {
             return object.regular.getPositionUnitBox(i_part, ref_fac);
         }
@@ -94,7 +91,7 @@ struct InjectorPosition
         };
     }
 
-    AMREX_GPU_DEVICE
+    AMREX_GPU_HOST_DEVICE
     bool
     insideBounds (amrex::Real x, amrex::Real y, amrex::Real z) const noexcept
     {
@@ -104,14 +101,18 @@ struct InjectorPosition
     }
 
 private:
+    enum struct Type { random, regular };
+    Type type;
+
     union Object {
-        Object () noexcept : random() {}
-        Object (amrex::Dim3 const& a_ppc) noexcept : regular(a_ppc) {}
+        Object (InjectorPositionRandom*) noexcept : random() {}
+        Object (InjectorPositionRegular*, amrex::Dim3 const& a_ppc) noexcept
+            : regular(a_ppc) {}
         InjectorPositionRandom random;
         InjectorPositionRegular regular;
     };
     Object object;
-    InjectorPositionType type;
+
     amrex::Real xmin, xmax;
     amrex::Real ymin, ymax;
     amrex::Real zmin, zmax;

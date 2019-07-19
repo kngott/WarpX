@@ -7,7 +7,7 @@ InjectorPosition::useRandom () const noexcept
 {
     switch (type)
     {
-    case InjectorPositionType::random:
+    case Type::random:
     {
         return true;
     }

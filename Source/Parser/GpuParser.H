@@ -10,7 +10,7 @@ public:
     GpuParser (WarpXParser const& wp);
     void clear ();
 
-    AMREX_GPU_DEVICE
+    AMREX_GPU_HOST_DEVICE
     double
     operator() (double x, double y, double z) const noexcept
     {

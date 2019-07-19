@@ -22,28 +22,23 @@ class PlasmaInjector
 
 public:
 
-    using vec3 = std::array<amrex::Real, 3>;
+    PlasmaInjector ();
 
-    PlasmaInjector();
+    PlasmaInjector (int ispecies, const std::string& name);
 
-    PlasmaInjector(int ispecies, const std::string& name);
-
-    amrex::Real getDensity(amrex::Real x, amrex::Real y, amrex::Real z);
-
-    bool insideBounds(amrex::Real x, amrex::Real y, amrex::Real z);
+    bool insideBounds (amrex::Real x, amrex::Real y, amrex::Real z) const noexcept;
 
     int num_particles_per_cell;
 
     amrex::Vector<int> num_particles_per_cell_each_dim;
 
-    void getMomentum(vec3& u, amrex::Real x, amrex::Real y, amrex::Real z);
+    // gamma * beta
+    amrex::XDim3 getMomentum (amrex::Real x, amrex::Real y, amrex::Real z) const noexcept;
 
-    void getPositionUnitBox(vec3& r, int i_part, int ref_fac=1);
+    amrex::Real getCharge () {return charge;}
+    amrex::Real getMass () {return mass;}
 
-    amrex::Real getCharge() {return charge;}
-    amrex::Real getMass() {return mass;}
-
-    bool doInjection() { return part_pos != NULL;}
+    bool doInjection () const noexcept { return inj_pos != NULL;}
 
     bool add_single_particle = false;
     amrex::Vector<amrex::Real> single_particle_pos;
@@ -97,16 +92,12 @@ protected:
     int species_id;
     std::string species_name;
 
-    std::unique_ptr<PlasmaDensityProfile> rho_prof;
-    std::unique_ptr<PlasmaMomentumDistribution> mom_dist;
-    std::unique_ptr<PlasmaParticlePosition> part_pos;
-
     std::unique_ptr<InjectorPosition> inj_pos;
     std::unique_ptr<InjectorDensity > inj_rho;
     std::unique_ptr<InjectorMomentum> inj_mom;
     
-    void parseDensity(amrex::ParmParse pp);
-    void parseMomentum(amrex::ParmParse pp);    
+    void parseDensity (amrex::ParmParse& pp);
+    void parseMomentum (amrex::ParmParse& pp);    
 };
 
 #endif

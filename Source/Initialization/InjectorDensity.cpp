@@ -6,9 +6,20 @@ InjectorDensity::~InjectorDensity ()
 {
     switch (type)
     {
-    case InjectorDensityType::parser:
+    case Type::parser:
     {
         object.parser.m_parser.clear();
+        break;
+    }
+    case Type::custom:
+    {
+        object.custom.clear();
+        break;
+    }
+    case Type::predefined:
+    {
+        object.predefined.clear();
+        break;
     }
     }
 }
@@ -18,7 +29,7 @@ InjectorDensity::sharedMemoryNeeded () const noexcept
 {
     switch (type)
     {
-    case InjectorDensityType::parser:
+    case Type::parser:
     {
         return amrex::Gpu::numThreadsPerBlockParallelFor() * sizeof(double);
     }
@@ -27,59 +38,34 @@ InjectorDensity::sharedMemoryNeeded () const noexcept
     }
 }
 
-ConstantDensityProfile::ConstantDensityProfile(Real density)
-    : _density(density)
-{}
-
-Real ConstantDensityProfile::getDensity(Real x, Real y, Real z) const
+InjectorDensityPredefined::InjectorDensityPredefined (
+    std::string const& a_species_name) noexcept
+    : profile(Profile::null)
 {
-    return _density;
-}
+    ParmParse pp(a_species_name);
 
-CustomDensityProfile::CustomDensityProfile(const std::string& species_name)
-{
-    ParmParse pp(species_name);
-    pp.getarr("custom_profile_params", params);
-}
+    std::vector<amrex::Real> v;
+    pp.getarr("predefined_profile_params", v);
+    p = static_cast<amrex::Real*>
+        (amrex::The_Managed_Arena()->alloc(sizeof(amrex::Real)*v.size()));
+    for (int i = 0; i < static_cast<int>(v.size()); ++i) {
+        p[i] = v[i];
+    }
 
-PredefinedDensityProfile::PredefinedDensityProfile(const std::string& species_name)
-{
-    ParmParse pp(species_name);
     std::string which_profile_s;
-    pp.getarr("predefined_profile_params", params);
     pp.query("predefined_profile_name", which_profile_s);
+    std::transform(which_profile_s.begin(), which_profile_s.end(),
+                   which_profile_s.begin(), ::tolower);
     if (which_profile_s == "parabolic_channel"){
-        which_profile = predefined_profile_flag::parabolic_channel;
+        profile = Profile::parabolic_channel;
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(v.size() > 6,
+            "InjectorDensityPredefined::parabolic_channel: not enough parameters");
     }
 }
 
-ParseDensityProfile::ParseDensityProfile(std::string parse_density_function)
-    : _parse_density_function(parse_density_function)
+// Note that we are not allowed to have non-trivial destructor.
+// So we rely on clear() to free memory.
+void InjectorDensityPredefined::clear ()
 {
-    parser_density.define(parse_density_function);
-    parser_density.registerVariables({"x","y","z"});
-
-    ParmParse pp("my_constants");
-    std::set<std::string> symbols = parser_density.symbols();
-    symbols.erase("x");
-    symbols.erase("y");
-    symbols.erase("z"); // after removing variables, we are left with constants
-    for (auto it = symbols.begin(); it != symbols.end(); ) {
-        Real v;
-        if (pp.query(it->c_str(), v)) {
-            parser_density.setConstant(*it, v);
-            it = symbols.erase(it);
-        } else {
-            ++it;
-        }
-    }
-    for (auto const& s : symbols) { // make sure there no unknown symbols
-        amrex::Abort("ParseDensityProfile: Unknown symbol "+s);
-    }
+    amrex::The_Managed_Arena()->free(p);
 }
-
-Real ParseDensityProfile::getDensity(Real x, Real y, Real z) const
-{
-    return parser_density.eval(x,y,z);
-}
-

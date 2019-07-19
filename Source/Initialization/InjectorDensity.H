@@ -4,14 +4,14 @@
 #include <AMReX_Gpu.H>
 #include <AMReX_Dim3.H>
 #include <GpuParser.H>
-
-enum struct InjectorDensityType { constant, custom, predefined, parser };
+#include <CustomDensityProb.H>
+#include <WarpXConst.H>
 
 struct InjectorDensityConstant
 {
     InjectorDensityConstant (amrex::Real a_rho) noexcept : m_rho(a_rho) {}
 
-    AMREX_GPU_DEVICE
+    AMREX_GPU_HOST_DEVICE
     amrex::Real
     getDensity (amrex::Real, amrex::Real, amrex::Real) const noexcept
     {
@@ -27,7 +27,7 @@ struct InjectorDensityParser
     InjectorDensityParser (WarpXParser const& a_parser) noexcept
         : m_parser(a_parser) {}
 
-    AMREX_GPU_DEVICE
+    AMREX_GPU_HOST_DEVICE
     amrex::Real
     getDensity (amrex::Real x, amrex::Real y, amrex::Real z) const noexcept
     {
@@ -37,43 +37,111 @@ struct InjectorDensityParser
     GpuParser m_parser;
 };
 
+struct InjectorDensityPredefined
+{
+    InjectorDensityPredefined (std::string const& a_species_name) noexcept;
+
+    void clear ();
+
+    AMREX_GPU_HOST_DEVICE
+    amrex::Real
+    getDensity (amrex::Real x, amrex::Real y, amrex::Real z) const noexcept
+    {
+        switch (profile)
+        {
+        case Profile::parabolic_channel:
+        {
+            amrex::Real z_start   = p[0];
+            amrex::Real ramp_up   = p[1];
+            amrex::Real plateau   = p[2];
+            amrex::Real ramp_down = p[3];
+            amrex::Real rc        = p[4];
+            amrex::Real n0        = p[5];
+            amrex::Real n;
+            amrex::Real kp = PhysConst::q_e/PhysConst::c
+                *std::sqrt( n0/(PhysConst::m_e*PhysConst::ep0) );
+
+            if        ((z-z_start)>=0               and
+                       (z-z_start)<ramp_up ) {
+                n = (z-z_start)/ramp_up;
+            } else if ((z-z_start)>=ramp_up         and
+                       (z-z_start)< ramp_up+plateau ) {
+                n = 1.;
+            } else if ((z-z_start)>=ramp_up+plateau and
+                       (z-z_start)< ramp_up+plateau+ramp_down) {
+                n = 1.-((z-z_start)-ramp_up-plateau)/ramp_down;
+            } else {
+                n = 0.;
+            }
+            n *= n0*(1.+4.*(x*x+y*y)/(kp*kp*rc*rc*rc*rc));
+            return n;
+        }
+        default:
+            amrex::Abort("InjectorDensityPredefined: how did we get here?");
+            return 0.0;
+        }
+    }
+
+private:
+    enum struct Profile { null, parabolic_channel };
+    Profile profile;
+    amrex::Real* p;
+};
+
 struct InjectorDensity
     : public amrex::Gpu::Managed
 {
-    InjectorDensity (InjectorDensityType a_type, amrex::Real a_rho)
-        : object(a_rho),
-          type(a_type)
-    {
-        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(a_type == InjectorDensityType::constant,
-                                         "InjectorDensity: must be type constant");
-    }
+    InjectorDensity (InjectorDensityConstant* t, amrex::Real a_rho)
+        : type(Type::constant),
+          object(t,a_rho)
+    { }
 
-    InjectorDensity (InjectorDensityType a_type, WarpXParser const& a_parser)
-        : object(a_parser),
-          type(a_type)
-    {
-        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(a_type == InjectorDensityType::parser,
-                                         "InjectorDensity: must be type parser");
-    }
+    InjectorDensity (InjectorDensityParser* t, WarpXParser const& a_parser)
+        : type(Type::parser),
+          object(t,a_parser)
+    { }
+
+    InjectorDensity (InjectorDensityCustom* t, std::string const& a_species_name)
+        : type(Type::custom),
+          object(t,a_species_name)
+    { }
+
+    InjectorDensity (InjectorDensityPredefined* t, std::string const& a_species_name)
+        : type(Type::predefined),
+          object(t,a_species_name)
+    { }
+
+    InjectorDensity (InjectorDensity const&) = delete;
+    InjectorDensity (InjectorDensity&&) = delete;
+    void operator= (InjectorDensity const&) = delete;
+    void operator= (InjectorDensity &&) = delete;
 
     ~InjectorDensity ();
 
     std::size_t sharedMemoryNeeded () const noexcept;
     bool useRandom () const noexcept { return false; }
 
-    AMREX_GPU_DEVICE
+    AMREX_GPU_HOST_DEVICE
     amrex::Real
     getDensity (amrex::Real x, amrex::Real y, amrex::Real z) const noexcept
     {
         switch (type)
         {
-        case InjectorDensityType::parser:
+        case Type::parser:
         {
             return object.parser.getDensity(x,y,z);
         }
-        case InjectorDensityType::constant:
+        case Type::constant:
         {
             return object.constant.getDensity(x,y,z);
+        }
+        case Type::custom:
+        {
+            return object.custom.getDensity(x,y,z);
+        }
+        case Type::predefined:
+        {
+            return object.predefined.getDensity(x,y,z);
         }
         default:
         {
@@ -84,98 +152,24 @@ struct InjectorDensity
     }
 
 private:
+    enum struct Type { constant, custom, predefined, parser };
+    Type type;
+
     union Object {
-        Object (amrex::Real a_rho) noexcept : constant(a_rho) {}
-        Object (WarpXParser const& a_parser) noexcept : parser(a_parser) {}
-        InjectorDensityConstant constant;
-        InjectorDensityParser   parser;
+        Object (InjectorDensityConstant*, amrex::Real a_rho) noexcept
+            : constant(a_rho) {}
+        Object (InjectorDensityParser*, WarpXParser const& a_parser) noexcept
+            : parser(a_parser) {}
+        Object (InjectorDensityCustom*, std::string const& a_species_name) noexcept
+            : custom(a_species_name) {}
+        Object (InjectorDensityPredefined*, std::string const& a_species_name) noexcept
+            : predefined(a_species_name) {}
+        InjectorDensityConstant   constant;
+        InjectorDensityParser     parser;
+        InjectorDensityCustom     custom;
+        InjectorDensityPredefined predefined;
     };
     Object object;
-    InjectorDensityType type;
-};
-
-
-enum class predefined_profile_flag { Null, parabolic_channel };
-
-///
-/// PlasmaDensityProfile describes how the charge density
-/// is set in particle initialization. Subclasses must define a
-/// getDensity function that describes the charge density as a
-/// function of x, y, and z.
-///
-class PlasmaDensityProfile
-{
-public:
-    virtual ~PlasmaDensityProfile() {};
-    virtual amrex::Real getDensity(amrex::Real x,
-                                   amrex::Real y,
-                                   amrex::Real z) const = 0;
-protected:
-    std::string _species_name;
-};
-
-///
-/// This describes a constant density distribution.
-///
-class ConstantDensityProfile : public PlasmaDensityProfile
-{
-public:
-    ConstantDensityProfile(amrex::Real _density);
-    virtual amrex::Real getDensity(amrex::Real x,
-                                   amrex::Real y,
-                                   amrex::Real z) const override;
-
-//private:
-    amrex::Real _density;
-};
-
-///
-/// This describes a custom density distribution. Users can supply
-/// in their problem directory.
-///
-///
-class CustomDensityProfile : public PlasmaDensityProfile
-{
-public:
-    CustomDensityProfile(const std::string& species_name);
-    virtual amrex::Real getDensity(amrex::Real x,
-                                   amrex::Real y,
-                                   amrex::Real z) const override;
-private:
-    amrex::Vector<amrex::Real> params;
-};
-
-///
-/// This describes predefined density distributions.
-///
-class PredefinedDensityProfile : public PlasmaDensityProfile
-{
-public:
-    PredefinedDensityProfile(const std::string& species_name);
-    virtual amrex::Real getDensity(amrex::Real x,
-                                   amrex::Real y,
-                                   amrex::Real z) const override;
-    amrex::Real ParabolicChannel(amrex::Real x,
-                                 amrex::Real y,
-                                 amrex::Real z) const;
-private:
-    predefined_profile_flag which_profile = predefined_profile_flag::Null;
-    amrex::Vector<amrex::Real> params;
-};
-
-///
-/// This describes a density function parsed in the input file. 
-///
-class ParseDensityProfile : public PlasmaDensityProfile
-{
-public:
-    ParseDensityProfile(const std::string _parse_density_function);
-    virtual amrex::Real getDensity(amrex::Real x,
-                                   amrex::Real y,
-                                   amrex::Real z) const override;
-//private:
-    std::string _parse_density_function;
-    WarpXParser parser_density;
 };
 
 #endif

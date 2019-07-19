@@ -55,14 +55,31 @@ namespace {
     }
 }
 
-PlasmaInjector::PlasmaInjector(){
-    part_pos = NULL;
-}
+PlasmaInjector::PlasmaInjector () {}
 
-PlasmaInjector::PlasmaInjector(int ispecies, const std::string& name)
+PlasmaInjector::PlasmaInjector (int ispecies, const std::string& name)
     : species_id(ispecies), species_name(name)
 {
     ParmParse pp(species_name);
+
+    pp.query("radially_weighted", radially_weighted);
+    AMREX_ALWAYS_ASSERT_WITH_MESSAGE(radially_weighted, "ERROR: Only radially_weighted=true is supported");
+
+    // parse plasma boundaries
+    xmin = std::numeric_limits<amrex::Real>::lowest();
+    ymin = std::numeric_limits<amrex::Real>::lowest();
+    zmin = std::numeric_limits<amrex::Real>::lowest();
+
+    xmax = std::numeric_limits<amrex::Real>::max();
+    ymax = std::numeric_limits<amrex::Real>::max();
+    zmax = std::numeric_limits<amrex::Real>::max();
+
+    pp.query("xmin", xmin);
+    pp.query("ymin", ymin);
+    pp.query("zmin", zmin);
+    pp.query("xmax", xmax);
+    pp.query("ymax", ymax);
+    pp.query("zmax", zmax);
 
     // parse charge and mass
     std::string charge_s;
@@ -114,7 +131,8 @@ PlasmaInjector::PlasmaInjector(int ispecies, const std::string& name)
     }
     else if (part_pos_s == "nrandompercell") {
         pp.query("num_particles_per_cell", num_particles_per_cell);
-        part_pos.reset(new RandomPosition(num_particles_per_cell));
+        inj_pos.reset(new InjectorPosition((InjectorPositionRandom*)nullptr,
+                                           xmin, xmax, ymin, ymax, zmin, zmax));
         parseDensity(pp);
         parseMomentum(pp);
     } else if (part_pos_s == "nuniformpercell") {
@@ -123,7 +141,11 @@ PlasmaInjector::PlasmaInjector(int ispecies, const std::string& name)
 #if ( AMREX_SPACEDIM == 2 )
         num_particles_per_cell_each_dim[2] = 1;
 #endif
-        part_pos.reset(new RegularPosition(num_particles_per_cell_each_dim));
+        inj_pos.reset(new InjectorPosition((InjectorPositionRegular*)nullptr,
+                                           xmin, xmax, ymin, ymax, zmin, zmax,
+                                           Dim3{num_particles_per_cell_each_dim[0],
+                                                num_particles_per_cell_each_dim[1],
+                                                num_particles_per_cell_each_dim[2]}));
         num_particles_per_cell = num_particles_per_cell_each_dim[0] *
                                  num_particles_per_cell_each_dim[1] *
                                  num_particles_per_cell_each_dim[2];
@@ -132,52 +154,61 @@ PlasmaInjector::PlasmaInjector(int ispecies, const std::string& name)
     } else {
         StringParseAbortMessage("Injection style", part_pos_s);
     }
-
-    pp.query("radially_weighted", radially_weighted);
-    AMREX_ALWAYS_ASSERT_WITH_MESSAGE(radially_weighted, "ERROR: Only radially_weighted=true is supported");
-
-    // parse plasma boundaries
-    xmin = std::numeric_limits<amrex::Real>::lowest();
-    ymin = std::numeric_limits<amrex::Real>::lowest();
-    zmin = std::numeric_limits<amrex::Real>::lowest();
-
-    xmax = std::numeric_limits<amrex::Real>::max();
-    ymax = std::numeric_limits<amrex::Real>::max();
-    zmax = std::numeric_limits<amrex::Real>::max();
-
-    pp.query("xmin", xmin);
-    pp.query("ymin", ymin);
-    pp.query("zmin", zmin);
-    pp.query("xmax", xmax);
-    pp.query("ymax", ymax);
-    pp.query("zmax", zmax);
-
 }
 
-void PlasmaInjector::parseDensity(ParmParse pp){
+namespace {
+WarpXParser makeParser (std::string const& parse_function)
+{
+    WarpXParser parser(parse_function);
+    parser.registerVariables({"x","y","z"});
+
+    ParmParse pp("my_constants");
+    std::set<std::string> symbols = parser.symbols();
+    symbols.erase("x");
+    symbols.erase("y");
+    symbols.erase("z"); // after removing variables, we are left with constants
+    for (auto it = symbols.begin(); it != symbols.end(); ) {
+        Real v;
+        if (pp.query(it->c_str(), v)) {
+            parser.setConstant(*it, v);
+            it = symbols.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    for (auto const& s : symbols) { // make sure there no unknown symbols
+        amrex::Abort("PlasmaInjector::makeParser: Unknown symbol "+s);
+    }
+
+    return parser;
+}
+}
+
+void PlasmaInjector::parseDensity (ParmParse& pp)
+{
     // parse density information
     std::string rho_prof_s;
     pp.get("profile", rho_prof_s);
-    std::transform(rho_prof_s.begin(),
-                   rho_prof_s.end(),
-                   rho_prof_s.begin(),
-                   ::tolower);
+    std::transform(rho_prof_s.begin(), rho_prof_s.end(),
+                   rho_prof_s.begin(), ::tolower);
     if (rho_prof_s == "constant") {
         pp.get("density", density);
-        rho_prof.reset(new ConstantDensityProfile(density));
+        inj_rho.reset(new InjectorDensity((InjectorDensityConstant*)nullptr, density));
     } else if (rho_prof_s == "custom") {
-        rho_prof.reset(new CustomDensityProfile(species_name));
+        inj_rho.reset(new InjectorDensity((InjectorDensityCustom*)nullptr, species_name));
     } else if (rho_prof_s == "predefined") {
-        rho_prof.reset(new PredefinedDensityProfile(species_name));
+        inj_rho.reset(new InjectorDensity((InjectorDensityPredefined*)nullptr,species_name));
     } else if (rho_prof_s == "parse_density_function") {
         pp.get("density_function(x,y,z)", str_density_function);
-        rho_prof.reset(new ParseDensityProfile(str_density_function));
+        inj_rho.reset(new InjectorDensity((InjectorDensityParser*)nullptr,
+                                          makeParser(str_density_function)));
     } else {
         StringParseAbortMessage("Density profile type", rho_prof_s);
     }
 }
 
-void PlasmaInjector::parseMomentum(ParmParse pp){
+void PlasmaInjector::parseMomentum (ParmParse& pp)
+{
     // parse momentum information
     std::string mom_dist_s;
     pp.get("momentum_distribution_type", mom_dist_s);
@@ -192,9 +223,9 @@ void PlasmaInjector::parseMomentum(ParmParse pp){
         pp.query("ux", ux);
         pp.query("uy", uy);
         pp.query("uz", uz);
-        mom_dist.reset(new ConstantMomentumDistribution(ux, uy, uz));
+        inj_mom.reset(new InjectorMomentum((InjectorMomentumConstant*)nullptr, ux,uy, uz));
     } else if (mom_dist_s == "custom") {
-        mom_dist.reset(new CustomMomentumDistribution(species_name));
+        inj_mom.reset(new InjectorMomentum((InjectorMomentumCustom*)nullptr, species_name));
     } else if (mom_dist_s == "gaussian") {
         Real ux_m = 0.;
         Real uy_m = 0.;
@@ -208,134 +239,53 @@ void PlasmaInjector::parseMomentum(ParmParse pp){
         pp.query("ux_th", ux_th);
         pp.query("uy_th", uy_th);
         pp.query("uz_th", uz_th);
-        mom_dist.reset(new GaussianRandomMomentumDistribution(ux_m, uy_m, uz_m, 
-                                                              ux_th, uy_th, uz_th));
+        inj_mom.reset(new InjectorMomentum((InjectorMomentumGaussian*)nullptr,
+                                           ux_m, uy_m, uz_m, ux_th, uy_th, uz_th));
     } else if (mom_dist_s == "radial_expansion") {
         Real u_over_r = 0.;
         pp.query("u_over_r", u_over_r);
-        mom_dist.reset(new RadialExpansionMomentumDistribution(u_over_r));
+        inj_mom.reset(new InjectorMomentum
+                      ((InjectorMomentumRadialExpansion*)nullptr, u_over_r));
     } else if (mom_dist_s == "parse_momentum_function") {
         pp.get("momentum_function_ux(x,y,z)", str_momentum_function_ux);
         pp.get("momentum_function_uy(x,y,z)", str_momentum_function_uy);
         pp.get("momentum_function_uz(x,y,z)", str_momentum_function_uz);
-        mom_dist.reset(new ParseMomentumFunction(str_momentum_function_ux, 
-                                                 str_momentum_function_uy, 
-                                                 str_momentum_function_uz));
+        inj_mom.reset(new InjectorMomentum((InjectorMomentumParser*)nullptr,
+                                           makeParser(str_momentum_function_ux),
+                                           makeParser(str_momentum_function_ux),
+                                           makeParser(str_momentum_function_ux)));
     } else {
         StringParseAbortMessage("Momentum distribution type", mom_dist_s);
     }
 }
 
-void PlasmaInjector::getPositionUnitBox(vec3& r, int i_part, int ref_fac) {
-    return part_pos->getPositionUnitBox(r, i_part, ref_fac);
+XDim3 PlasmaInjector::getMomentum (Real x, Real y, Real z) const noexcept
+{
+    return inj_mom->getMomentum(x, y, z); // gamma*beta
 }
 
-void PlasmaInjector::getMomentum(vec3& u, Real x, Real y, Real z) {
-    mom_dist->getMomentum(u, x, y, z);
-    u[0] *= PhysConst::c;
-    u[1] *= PhysConst::c;
-    u[2] *= PhysConst::c;
-}
-
-bool PlasmaInjector::insideBounds(Real x, Real y, Real z) {
-  if (x >= xmax || x < xmin ||
-      y >= ymax || y < ymin ||
-      z >= zmax || z < zmin ) return false;
-  return true;
-}
-
-Real PlasmaInjector::getDensity(Real x, Real y, Real z) {
-    return rho_prof->getDensity(x, y, z);
+bool PlasmaInjector::insideBounds (Real x, Real y, Real z) const noexcept
+{
+    return (x < xmax and x >= xmin and
+            y < ymax and y >= ymin and
+            z < zmax and z >= zmin);
 }
 
 InjectorPosition*
 PlasmaInjector::getInjectorPosition ()
 {
-    if (inj_pos == nullptr)
-    {
-        if (RandomPosition const* ppp =
-            dynamic_cast<RandomPosition const*>(part_pos.get()))
-        {
-            inj_pos.reset(new InjectorPosition(InjectorPositionType::random,
-                                               xmin, xmax, ymin, ymax, zmin, zmax));
-        }
-        else if (RegularPosition const* ppp =
-                 dynamic_cast<RegularPosition const*>(part_pos.get()))
-        {
-            inj_pos.reset(new InjectorPosition(InjectorPositionType::regular,
-                                               xmin, xmax, ymin, ymax, zmin, zmax,
-                                               Dim3{ppp->_num_particles_per_cell_each_dim[0],
-                                                    ppp->_num_particles_per_cell_each_dim[1],
-#if (AMREX_SPACEDIM == 3)
-                                                    ppp->_num_particles_per_cell_each_dim[2]
-#else
-                                                    1.0;
-#endif
-                                               }));
-        }
-        else
-        {
-            amrex::Abort("PlasmaInjector::getInjectorPosition: how did this happend");
-        }
-    }
     return inj_pos.get();
 }
 
 InjectorDensity*
 PlasmaInjector::getInjectorDensity ()
 {
-    if(inj_rho == nullptr)
-    {
-        if (ConstantDensityProfile const* p =
-            dynamic_cast<ConstantDensityProfile const*>(rho_prof.get()))
-        {
-            inj_rho.reset(new InjectorDensity(InjectorDensityType::constant,
-                                              p->_density));
-        }
-        else if (ParseDensityProfile const* p =
-                 dynamic_cast<ParseDensityProfile const*>(rho_prof.get()))
-        {
-            inj_rho.reset(new InjectorDensity(InjectorDensityType::parser,
-                                              p->parser_density));
-        }
-        else
-        {
-            amrex::Abort("PlasmaInjector::getInjectorDensity: how did this happen?");
-        }
-    }
     return inj_rho.get();
 }
 
 InjectorMomentum*
 PlasmaInjector::getInjectorMomentum ()
 {
-    if (inj_mom == nullptr)
-    {
-        if (ConstantMomentumDistribution const* p =
-            dynamic_cast<ConstantMomentumDistribution const*>(mom_dist.get()))
-        {
-            inj_mom.reset(new InjectorMomentum(InjectorMomentumType::constant,
-                                              p->_ux, p->_uy, p->_uz));
-        }
-        else if (ParseMomentumFunction const* p =
-                 dynamic_cast<ParseMomentumFunction const*>(mom_dist.get()))
-        {
-            inj_mom.reset(new InjectorMomentum(InjectorMomentumType::parser,
-                                               p->parser_ux, p->parser_uy,
-                                               p->parser_uz));
-        }
-        else if (GaussianRandomMomentumDistribution const* p =
-                 dynamic_cast<GaussianRandomMomentumDistribution const*>(mom_dist.get()))
-        {
-            inj_mom.reset(new InjectorMomentum(InjectorMomentumType::gaussian,
-                                               p->_ux_m, p->_uy_m, p->_uz_m,
-                                               p->_ux_th, p->_uy_th, p->_uz_th));
-        }
-        else
-        {
-            amrex::Abort("PlasmaInjector::getInjectorMomentum: how did this happen?");
-        }
-    }
     return inj_mom.get();
 }
 

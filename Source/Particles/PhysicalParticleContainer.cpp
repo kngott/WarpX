@@ -10,62 +10,6 @@
 
 using namespace amrex;
 
-long PhysicalParticleContainer::
-NumParticlesToAdd(const Box& overlap_box, const RealBox& overlap_realbox,
-                  const RealBox& tile_realbox, const RealBox& particle_real_box)
-{
-    const int lev = 0;
-    const Geometry& geom = Geom(lev);
-    int num_ppc = plasma_injector->num_particles_per_cell;
-    const Real* dx = geom.CellSize();
-
-    long np = 0;
-    const auto& overlap_corner = overlap_realbox.lo();
-    for (IntVect iv = overlap_box.smallEnd(); iv <= overlap_box.bigEnd(); overlap_box.next(iv))
-    {
-        int fac;
-        if (do_continuous_injection) {
-#if ( AMREX_SPACEDIM == 3 )
-            Real x = overlap_corner[0] + (iv[0] + 0.5)*dx[0];
-            Real y = overlap_corner[1] + (iv[1] + 0.5)*dx[1];
-            Real z = overlap_corner[2] + (iv[2] + 0.5)*dx[2];
-#elif ( AMREX_SPACEDIM == 2 )
-            Real x = overlap_corner[0] + (iv[0] + 0.5)*dx[0];
-            Real y = 0;
-            Real z = overlap_corner[1] + (iv[1] + 0.5)*dx[1];
-#endif
-            fac = GetRefineFac(x, y, z);
-        } else {
-            fac = 1.0;
-        }
-	
-        int ref_num_ppc = num_ppc * AMREX_D_TERM(fac, *fac, *fac);
-        for (int i_part=0; i_part<ref_num_ppc;i_part++) {
-            std::array<Real, 3> r;
-            plasma_injector->getPositionUnitBox(r, i_part, fac);
-#if ( AMREX_SPACEDIM == 3 )
-            Real x = overlap_corner[0] + (iv[0] + r[0])*dx[0];
-            Real y = overlap_corner[1] + (iv[1] + r[1])*dx[1];
-            Real z = overlap_corner[2] + (iv[2] + r[2])*dx[2];
-#elif ( AMREX_SPACEDIM == 2 )
-            Real x = overlap_corner[0] + (iv[0] + r[0])*dx[0];
-            Real y = 0;
-            Real z = overlap_corner[1] + (iv[1] + r[1])*dx[1];
-#endif
-            // If the new particle is not inside the tile box,
-            // go to the next generated particle.
-#if ( AMREX_SPACEDIM == 3 )
-            if(!tile_realbox.contains( RealVect{x, y, z} )) continue;
-#elif ( AMREX_SPACEDIM == 2 )
-            if(!tile_realbox.contains( RealVect{x, z} )) continue;
-#endif
-            ++np;
-        }
-    }
-    
-    return np;
-}
-
 PhysicalParticleContainer::PhysicalParticleContainer (AmrCore* amr_core, int ispecies,
                                                       const std::string& name)
     : WarpXParticleContainer(amr_core, ispecies),
@@ -127,9 +71,7 @@ PhysicalParticleContainer::PhysicalParticleContainer (AmrCore* amr_core)
 void PhysicalParticleContainer::InitData()
 {
     AddParticles(0); // Note - add on level 0
-    if (maxLevel() > 0) {
-        Redistribute();  // We then redistribute
-    }
+    Redistribute();  // We then redistribute
 }
 
 void PhysicalParticleContainer::MapParticletoBoostedFrame(Real& x, Real& y, Real& z, std::array<Real, 3>& u)
@@ -193,8 +135,6 @@ PhysicalParticleContainer::AddGaussianBeam(Real x_m, Real y_m, Real z_m,
     std::normal_distribution<double> distz(z_m, z_rms);
 
     if (ParallelDescriptor::IOProcessor()) {
-        std::array<Real, 3> u;
-        Real weight;
         // If do_symmetrize, create 4x fewer particles, and 
         // Replicate each particle 4 times (x,y) (-x,y) (x,-y) (-x,-y)
         if (do_symmetrize){
@@ -202,36 +142,29 @@ PhysicalParticleContainer::AddGaussianBeam(Real x_m, Real y_m, Real z_m,
         }
         for (long i = 0; i < npart; ++i) {
 #if ( AMREX_SPACEDIM == 3 | WARPX_RZ)
-            weight = q_tot/npart/charge;
+            Real weight = q_tot/npart/charge;
             Real x = distx(mt);
             Real y = disty(mt);
             Real z = distz(mt);
 #elif ( AMREX_SPACEDIM == 2 )
-            weight = q_tot/npart/charge/y_rms;
+            Real weight = q_tot/npart/charge/y_rms;
             Real x = distx(mt);
             Real y = 0.;
             Real z = distz(mt);
 #endif
             if (plasma_injector->insideBounds(x, y, z)) {
-                plasma_injector->getMomentum(u, x, y, z);
+                XDim3 u = plasma_injector->getMomentum(x, y, z);
+                u.x *= PhysConst::c;
+                u.y *= PhysConst::c;
+                u.z *= PhysConst::c;
                 if (do_symmetrize){
-                    std::array<Real, 3> u_tmp;
-                    Real x_tmp, y_tmp;
                     // Add four particles to the beam:
-                    // (x,ux,y,uy) (-x,-ux,y,uy) (x,ux,-y,-uy) (-x,-ux,-y,-uy)
-                    for (int ix=0; ix<2; ix++){
-                        for (int iy=0; iy<2; iy++){
-                            u_tmp = u;
-                            x_tmp     = x*std::pow(-1,ix);
-                            u_tmp[0] *= std::pow(-1,ix);
-                            y_tmp     = y*std::pow(-1,iy);
-                            u_tmp[1] *= std::pow(-1,iy);
-                            CheckAndAddParticle(x_tmp, y_tmp, z, 
-                                                u_tmp, weight/4);
-                        }
-                    }
+                    CheckAndAddParticle( x, y, z, { u.x, u.y, u.z}, weight/4. );
+                    CheckAndAddParticle( x,-y, z, { u.x,-u.y, u.z}, weight/4. );
+                    CheckAndAddParticle(-x, y, z, {-u.x, u.y, u.z}, weight/4. );
+                    CheckAndAddParticle(-x,-y, z, {-u.x,-u.y, u.z}, weight/4. );
                 } else {
-                    CheckAndAddParticle(x, y, z, u, weight);
+                    CheckAndAddParticle(x, y, z, {u.x,u.y,u.z}, weight);
                 }
             }
         }
@@ -319,6 +252,7 @@ PhysicalParticleContainer::AddParticles (int lev)
  * (this box should correspond to an integer number of cells in each direction,
  * but its boundaries need not be aligned with the actual cells of the simulation)
  */
+#if 0
 void
 PhysicalParticleContainer::AddPlasma (int lev, RealBox part_realbox)
 {
@@ -566,12 +500,12 @@ PhysicalParticleContainer::AddPlasmaCPU (int lev, RealBox part_realbox)
         }
     }
 }
+#endif
 
-#ifdef AMREX_USE_GPU
 void
-PhysicalParticleContainer::AddPlasmaGPU (int lev, RealBox part_realbox)
+PhysicalParticleContainer::AddPlasma (int lev, RealBox part_realbox)
 {
-    BL_PROFILE("PhysicalParticleContainer::AddPlasmaGPU");
+    BL_PROFILE("PhysicalParticleContainer::AddPlasma");
 
     // If no part_realbox is provided, initialize particles in the whole domain
     const Geometry& geom = Geom(lev);
@@ -791,9 +725,8 @@ PhysicalParticleContainer::AddPlasmaGPU (int lev, RealBox part_realbox)
                 u = inj_mom->getMomentum(x, y, 0.); // No z0_lab dependency
                 // At this point u is the lab-frame momentum
                 // => Apply the above formula for z0_lab
-                Real gamma_lab = std::sqrt( 1.+(u.x*u.x+u.y*u.y+u.z*u.z)
-                                            /(PhysConst::c*PhysConst::c) );
-                Real betaz_lab = u.z/(gamma_lab*PhysConst::c);
+                Real gamma_lab = std::sqrt( 1.+(u.x*u.x+u.y*u.y+u.z*u.z) );
+                Real betaz_lab = u.z/(gamma_lab);
                 Real z0_lab = gamma_boost * ( z*(1-beta_boost*betaz_lab)
                                               - PhysConst::c*t*(betaz_lab-beta_boost) );
                 // If the particle is not within the lab-frame zmin, zmax, etc.
@@ -807,8 +740,12 @@ PhysicalParticleContainer::AddPlasmaGPU (int lev, RealBox part_realbox)
                 // At this point u and dens are the lab-frame quantities
                 // => Perform Lorentz transform
                 dens = gamma_boost * dens * ( 1.0 - beta_boost*betaz_lab );
-                u.z = gamma_boost * ( u.z -beta_boost*PhysConst::c*gamma_lab );
+                u.z = gamma_boost * ( u.z -beta_boost*gamma_lab );
             }
+
+            u.x *= PhysConst::c;
+            u.y *= PhysConst::c;
+            u.z *= PhysConst::c;
 
             // Real weight = dens * scale_fac / (AMREX_D_TERM(fac, *fac, *fac));
             Real weight = dens * scale_fac;
@@ -859,8 +796,9 @@ PhysicalParticleContainer::AddPlasmaGPU (int lev, RealBox part_realbox)
             });
         }
     }
+
+    // The function that calls this is responsible for redistributing particles.
 }
-#endif
 
 #ifdef WARPX_DO_ELECTROSTATIC
 void
