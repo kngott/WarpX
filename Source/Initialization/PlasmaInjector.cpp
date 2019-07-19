@@ -252,8 +252,8 @@ void PlasmaInjector::parseMomentum (ParmParse& pp)
         pp.get("momentum_function_uz(x,y,z)", str_momentum_function_uz);
         inj_mom.reset(new InjectorMomentum((InjectorMomentumParser*)nullptr,
                                            makeParser(str_momentum_function_ux),
-                                           makeParser(str_momentum_function_ux),
-                                           makeParser(str_momentum_function_ux)));
+                                           makeParser(str_momentum_function_uy),
+                                           makeParser(str_momentum_function_uz)));
     } else {
         StringParseAbortMessage("Momentum distribution type", mom_dist_s);
     }
