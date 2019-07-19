@@ -361,7 +361,7 @@ PhysicalParticleContainer::AddPlasma (int lev, RealBox part_realbox)
         const int tile_id = mfi.LocalTileIndex();
 
         const int max_new_particles = overlap_box.numPts() * num_ppc;
-        const int pid;
+        int pid;
 #pragma omp critical (add_plasma_nextid)
         {
             pid = ParticleType::NextID();
