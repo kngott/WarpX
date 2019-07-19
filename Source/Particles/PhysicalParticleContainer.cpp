@@ -450,8 +450,6 @@ PhysicalParticleContainer::AddPlasma (int lev, RealBox part_realbox)
 #endif
 
 #if (AMREX_SPACEDIM == 3)
-            // Do I need to set every component?
-            // Is setting pid to negative sufficient?
             if (!tile_realbox.contains(XDim3{x,y,z})) {
                 p.id() = -1;
                 return;
@@ -475,7 +473,7 @@ PhysicalParticleContainer::AddPlasma (int lev, RealBox part_realbox)
             x = xb*std::cos(theta);
             y = xb*std::sin(theta);
 #endif
-    
+
             Real dens;
             XDim3 u;
             if (gamma_boost == 1.){
@@ -564,7 +562,7 @@ PhysicalParticleContainer::AddPlasma (int lev, RealBox part_realbox)
             p.pos(1) = z;
 #endif
         }, shared_mem_bytes);
-	    			 
+    			 
         if (cost) {
             wt = (amrex::second() - wt) / tile_box.d_numPts();
             Array4<Real> const& costarr = cost->array(mfi);
