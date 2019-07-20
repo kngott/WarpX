@@ -403,7 +403,11 @@ PhysicalParticleContainer::AddPlasma (int lev, RealBox part_realbox)
         const int ncells = overlap_box.numPts();
         const auto overlap_len = amrex::length(overlap_box);
 
+#ifdef WARPX_RZ
+        {
+#else
         if (plasma_injector->useRandom()) {
+#endif
             amrex::Gpu::streamSynchronize();
             amrex::CheckSeedArraySizeAndResize(max_new_particles);
         }
