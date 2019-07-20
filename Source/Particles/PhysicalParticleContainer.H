@@ -137,9 +137,6 @@ protected:
     bool boost_adjust_transverse_positions = false;
     bool do_backward_propagation = false;
 
-    int GetRefineFac(const amrex::Real x, const amrex::Real y, const amrex::Real z);
-    std::unique_ptr<amrex::IArrayBox> m_refined_injection_mask = nullptr;
-
     // Inject particles during the whole simulation
     void ContinuousInjection (const amrex::RealBox& injection_box) override;
 

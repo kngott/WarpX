@@ -267,6 +267,7 @@ PhysicalParticleContainer::AddPlasma (int lev, RealBox part_realbox)
 #endif
 
     const auto dx = geom.CellSizeArray();
+    const auto problo = geom.ProbLoArray();
 
     Real scale_fac;
 #if AMREX_SPACEDIM==3
@@ -289,17 +290,22 @@ PhysicalParticleContainer::AddPlasma (int lev, RealBox part_realbox)
 
     MultiFab* cost = WarpX::getCosts(lev);
 
-#if 0
-    // xxxxx todo
-    if ( (not m_refined_injection_mask) and WarpX::do_moving_window)
+    const int nlevs = numLevels();
+    static bool refine_injection = false;
+    static Box fine_injection_box;
+    static int rrfac = 1;
+    // This does not work if the mesh is dynamic.  But in that case, we should
+    // not use refined injected either.  We also assume there is only one fine level.
+    if (WarpX::do_moving_window and WarpX::refine_plasma
+        and do_continuous_injection and nlevs == 2)
     {
-        Box mask_box = geom.Domain();
-        mask_box.setSmall(WarpX::moving_window_dir, 0);
-        mask_box.setBig(WarpX::moving_window_dir, 0);
-        m_refined_injection_mask.reset( new IArrayBox(mask_box));
-        m_refined_injection_mask->setVal(-1);
+        refine_injection = true;
+        fine_injection_box = ParticleBoxArray(1).minimalBox();
+        fine_injection_box.setSmall(WarpX::moving_window_dir, std::numeric_limits<int>::lowest());
+        fine_injection_box.setBig(WarpX::moving_window_dir, std::numeric_limits<int>::max());
+        rrfac = m_gdb->refRatio(0)[0];
+        fine_injection_box.coarsen(rrfac);
     }
-#endif
 
     InjectorPosition* inj_pos = plasma_injector->getInjectorPosition();
     InjectorDensity*  inj_rho = plasma_injector->getInjectorDensity();
@@ -331,27 +337,29 @@ PhysicalParticleContainer::AddPlasma (int lev, RealBox part_realbox)
         // If there is no overlap, just go to the next tile in the loop
         RealBox overlap_realbox;
         Box overlap_box;
-        Real ncells_adjust;
-        bool no_overlap = 0;
+        IntVect shifted;
+        bool no_overlap = false;
 
         for (int dir=0; dir<AMREX_SPACEDIM; dir++) {
             if ( tile_realbox.lo(dir) <= part_realbox.hi(dir) ) {
-                ncells_adjust = std::floor( (tile_realbox.lo(dir) - part_realbox.lo(dir))/dx[dir] );
+                Real ncells_adjust = std::floor( (tile_realbox.lo(dir) - part_realbox.lo(dir))/dx[dir] );
                 overlap_realbox.setLo( dir, part_realbox.lo(dir) + std::max(ncells_adjust, 0.) * dx[dir]);
             } else {
-                no_overlap = 1; break;
+                no_overlap = true; break;
             }
             if ( tile_realbox.hi(dir) >= part_realbox.lo(dir) ) {
-                ncells_adjust = std::floor( (part_realbox.hi(dir) - tile_realbox.hi(dir))/dx[dir] );
+                Real ncells_adjust = std::floor( (part_realbox.hi(dir) - tile_realbox.hi(dir))/dx[dir] );
                 overlap_realbox.setHi( dir, part_realbox.hi(dir) - std::max(ncells_adjust, 0.) * dx[dir]);
             } else {
-                no_overlap = 1; break;
+                no_overlap = true; break;
             }
             // Count the number of cells in this direction in overlap_realbox
             overlap_box.setSmall( dir, 0 );
             overlap_box.setBig( dir,
                 int( std::round((overlap_realbox.hi(dir)-overlap_realbox.lo(dir))
                                 /dx[dir] )) - 1);
+            shifted[dir] = std::round((overlap_realbox.lo(dir)-problo[dir])/dx[dir]);
+            // shifted is exact in non-moving-window direction.  That's all we care.
         }
         if (no_overlap == 1) {
             continue; // Go to the next tile
@@ -360,7 +368,29 @@ PhysicalParticleContainer::AddPlasma (int lev, RealBox part_realbox)
         const int grid_id = mfi.index();
         const int tile_id = mfi.LocalTileIndex();
 
-        const int max_new_particles = overlap_box.numPts() * num_ppc;
+        int max_new_particles = overlap_box.numPts() * num_ppc;
+
+        Vector<int> cellid_v;
+        if (refine_injection and lev == 0)
+        {
+            // then how many new particles will be injected is not that simple
+            // We have to shift fine_injection_box because overlap_box has been shifted.
+            Box fine_overlap_box = overlap_box & amrex::shift(fine_injection_box,shifted);
+            max_new_particles += fine_overlap_box.numPts() * num_ppc
+                * (AMREX_D_TERM(rrfac,*rrfac,*rrfac)-1);
+            for (int icell = 0, ncells = overlap_box.numPts(); icell < ncells; ++icell) {
+                IntVect iv = overlap_box.atOffset(icell);
+                int r = (fine_overlap_box.contains(iv)) ? AMREX_D_TERM(rrfac,*rrfac,*rrfac) : 1;
+                for (int ipart = 0; ipart < r; ++ipart) {
+                    cellid_v.push_back(icell);
+                    cellid_v.push_back(ipart);
+                }
+            }
+        }
+        int const* hp_cellid = (cellid_v.empty()) ? nullptr : cellid_v.data();
+        amrex::AsyncArray<int> cellid_aa(hp_cellid, cellid_v.size());
+        int const* dp_cellid = cellid_aa.data();
+
         int pid;
 #pragma omp critical (add_plasma_nextid)
         {
@@ -395,13 +425,10 @@ PhysicalParticleContainer::AddPlasma (int lev, RealBox part_realbox)
             pb[5] = soa.GetRealData(particle_comps["uzold"]).data() + old_size;
         }
 
-        const GpuArray<Real,AMREX_SPACEDIM> overlap_corner 
+        const GpuArray<Real,AMREX_SPACEDIM> overlap_corner
             {AMREX_D_DECL(overlap_realbox.lo(0),
                           overlap_realbox.lo(1),
                           overlap_realbox.lo(2))};
-
-        const int ncells = overlap_box.numPts();
-        const auto overlap_len = amrex::length(overlap_box);
 
 #ifdef WARPX_RZ
         {
@@ -413,44 +440,37 @@ PhysicalParticleContainer::AddPlasma (int lev, RealBox part_realbox)
         }
     
         std::size_t shared_mem_bytes = plasma_injector->sharedMemoryNeeded();
+        int lrrfac = rrfac;
 
         amrex::For(max_new_particles, [=] AMREX_GPU_DEVICE (int ip) noexcept
         {
             ParticleType& p = pp[ip];
             p.id() = pid+ip;
             p.cpu() = cpuid;
-            int cellid = ip/num_ppc;
-            int i_part = ip - cellid*num_ppc;
-            int k = cellid / (overlap_len.x*overlap_len.y);
-            int j = (cellid-k*(overlap_len.x*overlap_len.y))/overlap_len.x;
-            int i = (cellid-k*(overlap_len.x*overlap_len.y)) - j*overlap_len.x;
 
-#if 0
-                if (do_continuous_injection) {
-#if ( AMREX_SPACEDIM == 3 )
-                    Real x = overlap_corner[0] + (iv[0] + 0.5)*dx[0];
-                    Real y = overlap_corner[1] + (iv[1] + 0.5)*dx[1];
-                    Real z = overlap_corner[2] + (iv[2] + 0.5)*dx[2];
-#elif ( AMREX_SPACEDIM == 2 )
-                    Real x = overlap_corner[0] + (iv[0] + 0.5)*dx[0];
-                    Real y = 0;
-                    Real z = overlap_corner[1] + (iv[1] + 0.5)*dx[1];
-#endif
-                    fac = GetRefineFac(x, y, z);
-                } else {
-                    fac = 1.0;
-                }
-#endif
+            int cellid, i_part;
+            Real fac;
+            if (dp_cellid == nullptr) {
+                cellid = ip/num_ppc;
+                i_part = ip - cellid*num_ppc;
+                fac = 1.0;
+            } else {
+                cellid = dp_cellid[2*ip];
+                i_part = dp_cellid[2*ip+1];
+                fac = lrrfac;
+            }
 
-            const XDim3 r = inj_pos->getPositionUnitBox(i_part, 1.0);
+            IntVect iv = overlap_box.atOffset(cellid);
+
+            const XDim3 r = inj_pos->getPositionUnitBox(i_part, fac);
 #if (AMREX_SPACEDIM == 3)
-            Real x = overlap_corner[0] + (i+r.x)*dx[0];
-            Real y = overlap_corner[1] + (j+r.y)*dx[1];
-            Real z = overlap_corner[2] + (k+r.z)*dx[2];
+            Real x = overlap_corner[0] + (iv[0]+r.x)*dx[0];
+            Real y = overlap_corner[1] + (iv[1]+r.y)*dx[1];
+            Real z = overlap_corner[2] + (iv[2]+r.z)*dx[2];
 #else
-            Real x = overlap_corner[0] + (i+r.x)*dx[0];
+            Real x = overlap_corner[0] + (iv[0]+r.x)*dx[0];
             Real y = 0.0;
-            Real z = overlap_corner[1] + (j+r.y)*dx[1];
+            Real z = overlap_corner[1] + (iv[1]+r.y)*dx[1];
 #endif
 
 #if (AMREX_SPACEDIM == 3)
@@ -480,7 +500,7 @@ PhysicalParticleContainer::AddPlasma (int lev, RealBox part_realbox)
 
             Real dens;
             XDim3 u;
-            if (gamma_boost == 1.){
+            if (gamma_boost == 1.) {
                 // Lab-frame simulation
                 // If the particle is not within the species's
                 // xmin, xmax, ymin, ymax, zmin, zmax, go to
@@ -1788,74 +1808,6 @@ void PhysicalParticleContainer::GetParticleSlice(const int direction, const Real
             }
         }
     }
-}
-
-int PhysicalParticleContainer::GetRefineFac(const Real x, const Real y, const Real z)
-{
-    if (finestLevel() == 0) return 1;
-    if (not WarpX::refine_plasma) return 1;
-
-    IntVect iv;
-    const Geometry& geom = Geom(0);
-
-    std::array<Real, 3> offset;
-
-#if ( AMREX_SPACEDIM == 3)
-    offset[0] = geom.ProbLo(0);
-    offset[1] = geom.ProbLo(1);
-    offset[2] = geom.ProbLo(2);
-#elif ( AMREX_SPACEDIM == 2 )
-    offset[0] = geom.ProbLo(0);
-    offset[1] = 0.0;
-    offset[2] = geom.ProbLo(1);
-#endif
-
-    AMREX_D_TERM(iv[0]=static_cast<int>(floor((x-offset[0])*geom.InvCellSize(0)));,
-                 iv[1]=static_cast<int>(floor((y-offset[1])*geom.InvCellSize(1)));,
-                 iv[2]=static_cast<int>(floor((z-offset[2])*geom.InvCellSize(2))););
-
-    iv += geom.Domain().smallEnd();
-
-    const int dir = WarpX::moving_window_dir;
-
-    IntVect iv2 = iv;
-    iv2[dir] = 0;
-
-    if ( (*m_refined_injection_mask)(iv2) != -1) return (*m_refined_injection_mask)(iv2);
-
-    int ref_fac = 1;
-    for (int lev = 0; lev < finestLevel(); ++lev)
-    {
-        const IntVect rr = m_gdb->refRatio(lev);
-        const BoxArray& fine_ba = this->ParticleBoxArray(lev+1);
-        const int num_boxes = fine_ba.size();
-        Vector<Box> stretched_boxes;
-        const int safety_factor = 4;
-        for (int i = 0; i < num_boxes; ++i)
-        {
-            Box bx = fine_ba[i];
-            bx.coarsen(ref_fac*rr[dir]);
-            bx.setSmall(dir, std::numeric_limits<int>::min()/safety_factor);
-            bx.setBig(dir, std::numeric_limits<int>::max()/safety_factor);
-            stretched_boxes.push_back(bx);
-        }
-
-        BoxArray stretched_ba(stretched_boxes.dataPtr(), stretched_boxes.size());
-
-        const int num_ghost = 0;
-        if ( stretched_ba.intersects(Box(iv, iv), num_ghost) )
-        {
-            ref_fac *= rr[dir];
-        }
-        else
-        {
-            break;
-        }
-    }
-
-    (*m_refined_injection_mask)(iv2) = ref_fac;
-
-    return ref_fac;
 }
 
 /* \brief Inject particles during the simulation
