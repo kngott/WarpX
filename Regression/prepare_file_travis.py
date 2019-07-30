@@ -39,9 +39,6 @@ text = re.sub( 'numMakeJobs = \d+', 'numMakeJobs = 2', text )
 text = re.sub( 'numprocs = \d+', 'numprocs = 1', text)
 text = re.sub( 'numthreads = \d+', 'numthreads = 1', text)
 
-# Remove Python test (does not compile)
-text = re.sub( '\[Python_Langmuir\]\n(.+\n)*', '', text)
-
 # Remove Langmuir_x/y/z test (too long; not that useful)
 text = re.sub( '\[Langmuir_[xyz]\]\n(.+\n)*', '', text)
 
