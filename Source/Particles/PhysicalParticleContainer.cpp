@@ -1175,6 +1175,7 @@ PhysicalParticleContainer::Evolve (int lev,
                 //
                 BL_PROFILE_VAR_START(blp_pxr_fg);
 #ifdef WARPX_RZ
+                const std::array<Real,3>& dx = WarpX::CellSize(lev);
                 const int ll4symtry = false;
                 long lvect_fieldgathe = 64;
                 const std::array<Real,3>& xyzmin_grid = WarpX::LowerCorner(box, lev);
@@ -1271,7 +1272,6 @@ PhysicalParticleContainer::Evolve (int lev,
                     
                     // Field gather for particles in gather buffers
 #ifdef WARPX_RZ
-                    const std::array<Real,3>& dx = WarpX::CellSize(lev);
                     const std::array<Real,3>& cdx = WarpX::CellSize(std::max(lev-1,0));
                     const std::array<Real,3>& cxyzmin_grid = WarpX::LowerCorner(cbox, lev-1);
                     const int* cixyzmin_grid = cbox.loVect();
