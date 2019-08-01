@@ -825,8 +825,6 @@ PhysicalParticleContainer::FieldGather (int lev,
                                         const MultiFab& Ex, const MultiFab& Ey, const MultiFab& Ez,
                                         const MultiFab& Bx, const MultiFab& By, const MultiFab& Bz)
 {
-    const std::array<Real,3>& dx = WarpX::CellSize(lev);
-
     BL_ASSERT(OnSameGrids(lev,Ex));
 
     MultiFab* cost = WarpX::getCosts(lev);
@@ -877,15 +875,15 @@ PhysicalParticleContainer::FieldGather (int lev,
             //
             pti.GetPosition(m_xp[thread_num], m_yp[thread_num], m_zp[thread_num]);
 
-            const std::array<Real,3>& xyzmin = WarpX::LowerCorner(box, lev);
-            const int* ixyzmin = box.loVect();
-
             //
             // Field Gather
             //
 #ifdef WARPX_RZ
+            const std::array<Real,3>& dx = WarpX::CellSize(lev);
             const int ll4symtry = false;
             long lvect_fieldgathe = 64;
+            const std::array<Real,3>& xyzmin = WarpX::LowerCorner(box, lev);
+            const int* ixyzmin = box.loVect();
             warpx_geteb_energy_conserving(
                 &np,
                 m_xp[thread_num].dataPtr(),
@@ -943,9 +941,6 @@ PhysicalParticleContainer::Evolve (int lev,
     BL_PROFILE_VAR_NS("PPC::ParticlePush", blp_ppc_pp);
     BL_PROFILE_VAR_NS("PPC::Evolve::partition", blp_partition);
     
-    const std::array<Real,3>& dx = WarpX::CellSize(lev);
-    const std::array<Real,3>& cdx = WarpX::CellSize(std::max(lev-1,0));
-
     // Get instances of NCI Godfrey filters 
     const auto& nci_godfrey_filter_exeybz = WarpX::GetInstance().nci_godfrey_filter_exeybz;
     const auto& nci_godfrey_filter_bxbyez = WarpX::GetInstance().nci_godfrey_filter_bxbyez;
@@ -1213,8 +1208,6 @@ PhysicalParticleContainer::Evolve (int lev,
                 {
                     const IntVect& ref_ratio = WarpX::RefRatio(lev-1);
                     const Box& cbox = amrex::coarsen(box,ref_ratio);
-                    const std::array<Real,3>& cxyzmin_grid = WarpX::LowerCorner(cbox, lev-1);
-                    const int* cixyzmin_grid = cbox.loVect();
 
                     // Data on the grid
                     FArrayBox const* cexfab = &(*cEx)[pti];
@@ -1278,7 +1271,10 @@ PhysicalParticleContainer::Evolve (int lev,
                     
                     // Field gather for particles in gather buffers
 #ifdef WARPX_RZ
-                    
+                    const std::array<Real,3>& dx = WarpX::CellSize(lev);
+                    const std::array<Real,3>& cdx = WarpX::CellSize(std::max(lev-1,0));
+                    const std::array<Real,3>& cxyzmin_grid = WarpX::LowerCorner(cbox, lev-1);
+                    const int* cixyzmin_grid = cbox.loVect();
                     long ncrse = np - nfine_gather;
                     warpx_geteb_energy_conserving(
                         &ncrse,
