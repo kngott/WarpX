@@ -21,9 +21,6 @@
 
 #endif
 
-#define LVECT_CURRDEPO 8_c_long
-#define LVECT_FIELDGATHE 64_c_long
-
 ! _________________________________________________________________
 !
 !> @brief
