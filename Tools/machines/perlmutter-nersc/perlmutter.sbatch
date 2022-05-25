@@ -17,7 +17,7 @@
 #SBATCH -c 32
 #SBATCH --ntasks-per-node=4
 #SBATCH --gpus-per-task=1
-#SBATCH --gpu-bind=single:1
+#SBATCH --gpu-bind=map_gpu:0,1,2,3
 #SBATCH -o WarpX.o%j
 #SBATCH -e WarpX.e%j
 
@@ -33,6 +33,7 @@
 #
 # --gpu-bind=single:1  sets only one GPU to be visible to each MPI rank
 #                         (quiets AMReX init warnings)
+# --gpu-bind=map_gpu:0,1,2,3  same as above but may yield more accurate NUMA distribution (prefered for now)
 #
 # Recommend using --ntasks-per-node=4, --gpus-per-task=1 and --gpu-bind=single:1,
 # as they are fixed values and allow for easy scaling with less adjustments.
