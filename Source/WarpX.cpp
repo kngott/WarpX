@@ -106,7 +106,8 @@ Real WarpX::moving_window_v = std::numeric_limits<amrex::Real>::max();
 
 bool WarpX::fft_do_time_averaging = false;
 
-amrex::IntVect WarpX::fill_guards = amrex::IntVect(0);
+amrex::IntVect WarpX::m_fill_guards_fields  = amrex::IntVect(0);
+amrex::IntVect WarpX::m_fill_guards_current = amrex::IntVect(0);
 
 Real WarpX::quantum_xi_c2 = PhysConst::xi_c2;
 Real WarpX::gamma_boost = 1._rt;
@@ -288,8 +289,12 @@ WarpX::WarpX ()
     current_fp.resize(nlevs_max);
     Efield_fp.resize(nlevs_max);
     Bfield_fp.resize(nlevs_max);
-    Efield_avg_fp.resize(nlevs_max);
-    Bfield_avg_fp.resize(nlevs_max);
+
+    if (fft_do_time_averaging)
+    {
+        Efield_avg_fp.resize(nlevs_max);
+        Bfield_avg_fp.resize(nlevs_max);
+    }
 
     m_edge_lengths.resize(nlevs_max);
     m_face_areas.resize(nlevs_max);
@@ -320,8 +325,12 @@ WarpX::WarpX ()
     current_cp.resize(nlevs_max);
     Efield_cp.resize(nlevs_max);
     Bfield_cp.resize(nlevs_max);
-    Efield_avg_cp.resize(nlevs_max);
-    Bfield_avg_cp.resize(nlevs_max);
+
+    if (fft_do_time_averaging)
+    {
+        Efield_avg_cp.resize(nlevs_max);
+        Bfield_avg_cp.resize(nlevs_max);
+    }
 
     Efield_cax.resize(nlevs_max);
     Bfield_cax.resize(nlevs_max);
@@ -681,14 +690,14 @@ WarpX::ReadParameters ()
         }
         // Parse the input file for domain boundary potentials
         ParmParse pp_boundary("boundary");
-        pp_boundary.query("potential_lo_x", field_boundary_handler.potential_xlo_str);
-        pp_boundary.query("potential_hi_x", field_boundary_handler.potential_xhi_str);
-        pp_boundary.query("potential_lo_y", field_boundary_handler.potential_ylo_str);
-        pp_boundary.query("potential_hi_y", field_boundary_handler.potential_yhi_str);
-        pp_boundary.query("potential_lo_z", field_boundary_handler.potential_zlo_str);
-        pp_boundary.query("potential_hi_z", field_boundary_handler.potential_zhi_str);
-        pp_warpx.query("eb_potential(x,y,z,t)", field_boundary_handler.potential_eb_str);
-        field_boundary_handler.buildParsers();
+        pp_boundary.query("potential_lo_x", m_poisson_boundary_handler.potential_xlo_str);
+        pp_boundary.query("potential_hi_x", m_poisson_boundary_handler.potential_xhi_str);
+        pp_boundary.query("potential_lo_y", m_poisson_boundary_handler.potential_ylo_str);
+        pp_boundary.query("potential_hi_y", m_poisson_boundary_handler.potential_yhi_str);
+        pp_boundary.query("potential_lo_z", m_poisson_boundary_handler.potential_zlo_str);
+        pp_boundary.query("potential_hi_z", m_poisson_boundary_handler.potential_zhi_str);
+        pp_warpx.query("eb_potential(x,y,z,t)", m_poisson_boundary_handler.potential_eb_str);
+        m_poisson_boundary_handler.buildParsers();
 
         queryWithParser(pp_warpx, "const_dt", const_dt);
 
@@ -1315,14 +1324,14 @@ WarpX::ReadParameters ()
             if (WarpX::field_boundary_lo[dir] == FieldBoundaryType::Damped ||
                 WarpX::field_boundary_hi[dir] == FieldBoundaryType::Damped)
             {
-                WarpX::fill_guards[dir] = 1;
+                WarpX::m_fill_guards_fields[dir] = 1;
             }
         }
 
         // Fill guard cells with backward FFTs if Vay current deposition is used
         if (WarpX::current_deposition_algo == CurrentDepositionAlgo::Vay)
         {
-            WarpX::fill_guards = amrex::IntVect(1);
+            WarpX::m_fill_guards_current = amrex::IntVect(1);
         }
     }
 
@@ -1795,13 +1804,16 @@ WarpX::AllocLevelMFs (int lev, const BoxArray& ba, const DistributionMapping& dm
             dm, ncomps, ngJ, tag("current_fp_vay[z]"));
     }
 
-    Bfield_avg_fp[lev][0] = std::make_unique<MultiFab>(amrex::convert(ba,Bx_nodal_flag),dm,ncomps,ngEB,tag("Bfield_avg_fp[x]"));
-    Bfield_avg_fp[lev][1] = std::make_unique<MultiFab>(amrex::convert(ba,By_nodal_flag),dm,ncomps,ngEB,tag("Bfield_avg_fp[y]"));
-    Bfield_avg_fp[lev][2] = std::make_unique<MultiFab>(amrex::convert(ba,Bz_nodal_flag),dm,ncomps,ngEB,tag("Bfield_avg_fp[z]"));
+    if (fft_do_time_averaging)
+    {
+        Bfield_avg_fp[lev][0] = std::make_unique<MultiFab>(amrex::convert(ba,Bx_nodal_flag),dm,ncomps,ngEB,tag("Bfield_avg_fp[x]"));
+        Bfield_avg_fp[lev][1] = std::make_unique<MultiFab>(amrex::convert(ba,By_nodal_flag),dm,ncomps,ngEB,tag("Bfield_avg_fp[y]"));
+        Bfield_avg_fp[lev][2] = std::make_unique<MultiFab>(amrex::convert(ba,Bz_nodal_flag),dm,ncomps,ngEB,tag("Bfield_avg_fp[z]"));
 
-    Efield_avg_fp[lev][0] = std::make_unique<MultiFab>(amrex::convert(ba,Ex_nodal_flag),dm,ncomps,ngEB,tag("Efield_avg_fp[x]"));
-    Efield_avg_fp[lev][1] = std::make_unique<MultiFab>(amrex::convert(ba,Ey_nodal_flag),dm,ncomps,ngEB,tag("Efield_avg_fp[y]"));
-    Efield_avg_fp[lev][2] = std::make_unique<MultiFab>(amrex::convert(ba,Ez_nodal_flag),dm,ncomps,ngEB,tag("Efield_avg_fp[z]"));
+        Efield_avg_fp[lev][0] = std::make_unique<MultiFab>(amrex::convert(ba,Ex_nodal_flag),dm,ncomps,ngEB,tag("Efield_avg_fp[x]"));
+        Efield_avg_fp[lev][1] = std::make_unique<MultiFab>(amrex::convert(ba,Ey_nodal_flag),dm,ncomps,ngEB,tag("Efield_avg_fp[y]"));
+        Efield_avg_fp[lev][2] = std::make_unique<MultiFab>(amrex::convert(ba,Ez_nodal_flag),dm,ncomps,ngEB,tag("Efield_avg_fp[z]"));
+    }
 
 #ifdef AMREX_USE_EB
     constexpr int nc_ls = 1;
@@ -2010,15 +2022,16 @@ WarpX::AllocLevelMFs (int lev, const BoxArray& ba, const DistributionMapping& dm
         Efield_cp[lev][1] = std::make_unique<MultiFab>(amrex::convert(cba,Ey_nodal_flag),dm,ncomps,ngEB,tag("Efield_cp[y]"));
         Efield_cp[lev][2] = std::make_unique<MultiFab>(amrex::convert(cba,Ez_nodal_flag),dm,ncomps,ngEB,tag("Efield_cp[z]"));
 
-        // Create the MultiFabs for B_avg
-        Bfield_avg_cp[lev][0] = std::make_unique<MultiFab>(amrex::convert(cba,Bx_nodal_flag),dm,ncomps,ngEB,tag("Bfield_avg_cp[x]"));
-        Bfield_avg_cp[lev][1] = std::make_unique<MultiFab>(amrex::convert(cba,By_nodal_flag),dm,ncomps,ngEB,tag("Bfield_avg_cp[y]"));
-        Bfield_avg_cp[lev][2] = std::make_unique<MultiFab>(amrex::convert(cba,Bz_nodal_flag),dm,ncomps,ngEB,tag("Bfield_avg_cp[z]"));
+        if (fft_do_time_averaging)
+        {
+            Bfield_avg_cp[lev][0] = std::make_unique<MultiFab>(amrex::convert(cba,Bx_nodal_flag),dm,ncomps,ngEB,tag("Bfield_avg_cp[x]"));
+            Bfield_avg_cp[lev][1] = std::make_unique<MultiFab>(amrex::convert(cba,By_nodal_flag),dm,ncomps,ngEB,tag("Bfield_avg_cp[y]"));
+            Bfield_avg_cp[lev][2] = std::make_unique<MultiFab>(amrex::convert(cba,Bz_nodal_flag),dm,ncomps,ngEB,tag("Bfield_avg_cp[z]"));
 
-        // Create the MultiFabs for E_avg
-        Efield_avg_cp[lev][0] = std::make_unique<MultiFab>(amrex::convert(cba,Ex_nodal_flag),dm,ncomps,ngEB,tag("Efield_avg_cp[x]"));
-        Efield_avg_cp[lev][1] = std::make_unique<MultiFab>(amrex::convert(cba,Ey_nodal_flag),dm,ncomps,ngEB,tag("Efield_avg_cp[y]"));
-        Efield_avg_cp[lev][2] = std::make_unique<MultiFab>(amrex::convert(cba,Ez_nodal_flag),dm,ncomps,ngEB,tag("Efield_avg_cp[z]"));
+            Efield_avg_cp[lev][0] = std::make_unique<MultiFab>(amrex::convert(cba,Ex_nodal_flag),dm,ncomps,ngEB,tag("Efield_avg_cp[x]"));
+            Efield_avg_cp[lev][1] = std::make_unique<MultiFab>(amrex::convert(cba,Ey_nodal_flag),dm,ncomps,ngEB,tag("Efield_avg_cp[y]"));
+            Efield_avg_cp[lev][2] = std::make_unique<MultiFab>(amrex::convert(cba,Ez_nodal_flag),dm,ncomps,ngEB,tag("Efield_avg_cp[z]"));
+        }
 
         // Create the MultiFabs for the current
         current_cp[lev][0] = std::make_unique<MultiFab>(amrex::convert(cba,jx_nodal_flag),dm,ncomps,ngJ,tag("current_cp[x]"));
@@ -2229,7 +2242,6 @@ void WarpX::AllocLevelSpectralSolver (amrex::Vector<std::unique_ptr<SpectralSolv
                                                 noy_fft,
                                                 noz_fft,
                                                 do_nodal,
-                                                WarpX::fill_guards,
                                                 m_v_galilean,
                                                 m_v_comoving,
                                                 dx_vect,

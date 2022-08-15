@@ -43,7 +43,7 @@
 #include <AMReX_Array.H>
 #include <AMReX_Config.H>
 #ifdef AMREX_USE_EB
-#   include "AMReX_EBFabFactory.H"
+#   include <AMReX_EBFabFactory.H>
 #endif
 #include <AMReX_GpuContainers.H>
 #include <AMReX_IntVect.H>
@@ -205,8 +205,11 @@ public:
     //! perform field communications in single precision
     static bool do_single_precision_comms;
 
-    //! Whether to fill the guard cells when computing inverse FFTs, based on the boundary conditions
-    static amrex::IntVect fill_guards;
+    //! Whether to fill guard cells when computing inverse FFTs of fields
+    static amrex::IntVect m_fill_guards_fields;
+
+    //! Whether to fill guard cells when computing inverse FFTs of currents
+    static amrex::IntVect m_fill_guards_current;
 
     //! Solve additional Maxwell equation for F in order to control errors in Gauss' law
     //! (useful when using current deposition algorithms that are not charge-conserving)
@@ -364,7 +367,6 @@ public:
     amrex::MultiFab * get_pointer_edge_lengths  (int lev, int direction) const { return m_edge_lengths[lev][direction].get(); }
     amrex::MultiFab * get_pointer_face_areas  (int lev, int direction) const { return m_face_areas[lev][direction].get(); }
 
-    const amrex::MultiFab& getcurrent (int lev, int direction) {return *current_fp[lev][direction];}
     const amrex::MultiFab& getEfield  (int lev, int direction) {return *Efield_aux[lev][direction];}
     const amrex::MultiFab& getBfield  (int lev, int direction) {return *Bfield_aux[lev][direction];}
 
@@ -646,7 +648,21 @@ public:
     void FillBoundaryG   (int lev, amrex::IntVect ng, const bool nodal_sync = false);
     void FillBoundaryAux (int lev, amrex::IntVect ng);
 
-    void SyncCurrent ();
+    /**
+     * \brief Apply filter and sum guard cells across MR levels.
+     * If current centering is used, center the current from a nodal grid
+     * to a staggered grid. For each MR level beyond level 0, interpolate
+     * the fine-patch current onto the coarse-patch current at the same level.
+     * Then, for each MR level, including level 0, apply filter and sum guard
+     * cells across levels.
+     *
+     * \param[in,out] J_fp reference to fine-patch current \c MultiFab (all MR levels)
+     * \param[in,out] J_cp reference to coarse-patch current \c MultiFab (all MR levels)
+     */
+    void SyncCurrent (
+        const amrex::Vector<std::array<std::unique_ptr<amrex::MultiFab>,3>>& J_fp,
+        const amrex::Vector<std::array<std::unique_ptr<amrex::MultiFab>,3>>& J_cp);
+
     void SyncRho ();
 
     amrex::Vector<int> getnsubsteps () const {return nsubsteps;}
@@ -762,7 +778,7 @@ public:
      */
     const amrex::IntVect get_numprocs() const {return numprocs;}
 
-    ElectrostaticSolver::BoundaryHandler field_boundary_handler;
+    ElectrostaticSolver::PoissonBoundaryHandler m_poisson_boundary_handler;
     void ComputeSpaceChargeField (bool const reset_fields);
     void AddBoundaryField ();
     void AddSpaceChargeField (WarpXParticleContainer& pc);
@@ -934,18 +950,6 @@ private:
 
     void FillBoundaryB_avg (int lev, PatchType patch_type, amrex::IntVect ng);
     void FillBoundaryE_avg (int lev, PatchType patch_type, amrex::IntVect ng);
-
-    /**
-     * \brief Synchronize the nodal points of a given vector MultiFab (all mesh refinement levels)
-     */
-    void NodalSync (amrex::Vector<std::array<std::unique_ptr<amrex::MultiFab>,3>>& mf_fp,
-                    amrex::Vector<std::array<std::unique_ptr<amrex::MultiFab>,3>>& mf_cp);
-
-    /**
-     * \brief Synchronize the nodal points of a given scalar MultiFab (all mesh refinement levels)
-     */
-    void NodalSync (amrex::Vector<std::unique_ptr<amrex::MultiFab>>& mf_fp,
-                    amrex::Vector<std::unique_ptr<amrex::MultiFab>>& mf_cp);
 
     void OneStep_nosub (amrex::Real t);
     void OneStep_sub1 (amrex::Real t);

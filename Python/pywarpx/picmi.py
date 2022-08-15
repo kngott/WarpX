@@ -13,6 +13,7 @@ import re
 
 import numpy as np
 import periodictable
+
 import picmistandard
 import pywarpx
 
@@ -61,23 +62,26 @@ class Species(picmistandard.PICMI_Species):
                     self.charge = '-q_e'
                 else:
                     self.charge = self.charge_state*constants.q_e
-            # Match a string of the format '#nXx', with the '#n' optional isotope number.
-            m = re.match(r'(?P<iso>#[\d+])*(?P<sym>[A-Za-z]+)', self.particle_type)
-            if m is not None:
-                element = periodictable.elements.symbol(m['sym'])
-                if m['iso'] is not None:
-                    element = element[m['iso'][1:]]
-                if self.charge_state is not None:
-                    assert self.charge_state <= element.number, Exception('%s charge state not valid'%self.particle_type)
-                    try:
-                        element = element.ion[self.charge_state]
-                    except ValueError:
-                        # Note that not all valid charge states are defined in elements,
-                        # so this value error can be ignored.
-                        pass
-                self.element = element
-                if self.mass is None:
-                    self.mass = element.mass*periodictable.constants.atomic_mass_constant
+            if self.particle_type is not None:
+                # Match a string of the format '#nXx', with the '#n' optional isotope number.
+                m = re.match(r'(?P<iso>#[\d+])*(?P<sym>[A-Za-z]+)', self.particle_type)
+                if m is not None:
+                    element = periodictable.elements.symbol(m['sym'])
+                    if m['iso'] is not None:
+                        element = element[m['iso'][1:]]
+                    if self.charge_state is not None:
+                        assert self.charge_state <= element.number, Exception('%s charge state not valid'%self.particle_type)
+                        try:
+                            element = element.ion[self.charge_state]
+                        except ValueError:
+                            # Note that not all valid charge states are defined in elements,
+                            # so this value error can be ignored.
+                            pass
+                    self.element = element
+                    if self.mass is None:
+                        self.mass = element.mass*periodictable.constants.atomic_mass_constant
+                else:
+                    raise Exception('The species "particle_type" is not known')
 
         self.boost_adjust_transverse_positions = kw.pop('warpx_boost_adjust_transverse_positions', None)
 
@@ -1041,6 +1045,7 @@ class Simulation(picmistandard.PICMI_Simulation):
         self.use_fdtd_nci_corr = kw.pop('warpx_use_fdtd_nci_corr', None)
         self.amr_check_input = kw.pop('warpx_amr_check_input', None)
         self.amr_restart = kw.pop('warpx_amr_restart', None)
+        self.zmax_plasma_to_compute_max_step = kw.pop('warpx_zmax_plasma_to_compute_max_step', None)
 
         self.collisions = kw.pop('warpx_collisions', None)
         self.embedded_boundary = kw.pop('warpx_embedded_boundary', None)
@@ -1064,6 +1069,8 @@ class Simulation(picmistandard.PICMI_Simulation):
         if self.gamma_boost is not None:
             pywarpx.warpx.gamma_boost = self.gamma_boost
             pywarpx.warpx.boost_direction = 'z'
+
+        pywarpx.warpx.zmax_plasma_to_compute_max_step = self.zmax_plasma_to_compute_max_step
 
         pywarpx.algo.current_deposition = self.current_deposition_algo
         pywarpx.algo.charge_deposition = self.charge_deposition_algo
@@ -1243,6 +1250,8 @@ class FieldDiagnostic(picmistandard.PICMI_FieldDiagnostic):
                     self.plot_finepatch = 1
                 elif dataname == 'crsepatch':
                     self.plot_crsepatch = 1
+                elif dataname == 'none':
+                    fields_to_plot = set(('none',))
 
             # --- Convert the set to a sorted list so that the order
             # --- is the same on all processors.
