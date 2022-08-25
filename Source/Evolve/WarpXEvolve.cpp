@@ -49,6 +49,10 @@
 #include <AMReX_Utility.H>
 #include <AMReX_Vector.H>
 
+
+#include "Utils/WarpXGraph.H"
+#include <AMReX_Graph.H>
+
 #include <algorithm>
 #include <array>
 #include <memory>
@@ -76,6 +80,9 @@ WarpX::Evolve (int numsteps)
     bool early_params_checked = false; // check typos in inputs after step 1
 
     static Real evolve_time = 0;
+
+    graph.clear();
+    GraphAddCellsandParticles();
 
     const int step_begin = istep[0];
     for (int step = istep[0]; step < numsteps_max && cur_time < stop_time; ++step)
@@ -118,6 +125,14 @@ WarpX::Evolve (int numsteps)
                 }
             }
         }
+
+        // PML comm patterns (todo) - see PMF.cpp
+        // Print Graph for "previous" time step.
+        // (So this "time step" is exclusively based on the new DM.)
+
+        std::string graph_name = "Step_" + ( (step==istep[0]) ? "Init" : std::to_string(step-1) );
+        GraphPrintandClear(graph_name);
+        GraphAddCellsandParticles();
 
         // At the beginning, we have B^{n} and E^{n}.
         // Particles have p^{n} and x^{n}.
@@ -370,6 +385,8 @@ WarpX::Evolve (int numsteps)
 
         // End loop on time steps
     }
+    GraphPrintandClear("Step_Final");
+
     multi_diags->FilterComputePackFlushLastTimestep( istep[0] );
 
     if (do_back_transformed_diagnostics) {

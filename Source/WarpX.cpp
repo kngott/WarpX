@@ -361,8 +361,7 @@ WarpX::WarpX ()
     // Set default values for particle and cell weights for costs update;
     // Default values listed here for the case AMREX_USE_GPU are determined
     // from single-GPU tests on Summit.
-    if (costs_heuristic_cells_wt<=0. && costs_heuristic_particles_wt<=0.
-        && WarpX::load_balance_costs_update_algo==LoadBalanceCostsUpdateAlgo::Heuristic)
+    if (costs_heuristic_cells_wt<=0. && costs_heuristic_particles_wt<=0.)
     {
 #ifdef AMREX_USE_GPU
         if (WarpX::maxwell_solver_id == MaxwellSolverAlgo::PSATD) {

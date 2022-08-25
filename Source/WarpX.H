@@ -37,6 +37,7 @@
 #include "Parallelization/GuardCellManager.H"
 #include "Utils/IntervalsParser.H"
 #include "Utils/WarpXAlgorithmSelection.H"
+#include "Utils/WarpXGraph.H"
 
 #include <AMReX.H>
 #include <AMReX_AmrCore.H>
@@ -1279,6 +1280,22 @@ private:
      * uniform plasma on a domain of size 128 by 128 by 128, from which the approximate
      * time per iteration per particle is computed. */
     amrex::Real costs_heuristic_particles_wt = amrex::Real(0);
+
+    // Graph stuff.
+    amrex::Graph graph;
+    // Saved data pieces.
+    amrex::Vector<std::unique_ptr<amrex::LayoutData<amrex::Real> > > g_temp;
+    amrex::Vector<amrex::Vector<int> > g_new_dmap;
+    amrex::Vector<bool> g_do_load_balance = false;
+    std::string g_fabname = "Ex";
+    Real* g_costptr = nullptr;
+
+    std::string GraphFabName(int lev);
+    void GraphAddCellsandParticles();
+    void GraphAddTemps(const std::string& fab_name, const std::string& wgt_name, const double scaling);
+    void GraphAddLoadBalance(const int lev, const bool do_load_balance, const Vector<int>& new_dm,
+                             const Real currentEfficiency, const Real proposedEfficiency);
+    void GraphPrintandClear(const std::string& graph_name);
 
     // Determines timesteps for override sync
     IntervalsParser override_sync_intervals;

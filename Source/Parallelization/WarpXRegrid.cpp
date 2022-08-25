@@ -103,19 +103,24 @@ WarpX::LoadBalance () {
         ParallelDescriptor::Bcast(&doLoadBalance, 1,
                                   ParallelDescriptor::IOProcessorNumber());
 
+//      Do this to always to properly capture in graph.
+//        if (doLoadBalance) {
+
+        Vector<int> pmap;
+        if (ParallelDescriptor::MyProc() == ParallelDescriptor::IOProcessorNumber()) {
+            pmap = newdm.ProcessorMap();
+        } else {
+            pmap.resize(static_cast<std::size_t>(nboxes));
+        }
+        ParallelDescriptor::Bcast(pmap.data(), pmap.size(), ParallelDescriptor::IOProcessorNumber());
+
+        if (ParallelDescriptor::MyProc() != ParallelDescriptor::IOProcessorNumber()) {
+            newdm = DistributionMapping(pmap);
+        }
+
+        GraphAddLoadBalanceLevel(lev, doLoadBalance, pmap, currentEfficiency, proposedEfficiency);
+
         if (doLoadBalance) {
-            Vector<int> pmap;
-            if (ParallelDescriptor::MyProc() == ParallelDescriptor::IOProcessorNumber()) {
-                pmap = newdm.ProcessorMap();
-            } else {
-                pmap.resize(static_cast<std::size_t>(nboxes));
-            }
-            ParallelDescriptor::Bcast(pmap.data(), pmap.size(), ParallelDescriptor::IOProcessorNumber());
-
-            if (ParallelDescriptor::MyProc() != ParallelDescriptor::IOProcessorNumber()) {
-                newdm = DistributionMapping(pmap);
-            }
-
             RemakeLevel(lev, t_new[lev], boxArray(lev), newdm);
 
             // Record the load balance efficiency
@@ -124,76 +129,6 @@ WarpX::LoadBalance () {
 
         loadBalancedAnyLevel = loadBalancedAnyLevel || doLoadBalance;
     }
-
-    // record metrics of costs in a graph at balance steps
-    amrex::Graph graph;
-    //{
-    // loadBalancedAnyLevel
-    // currentEfficiency
-    // proposedEfficiency
-
-    // load balance costs
-    for (int lev = 0; lev <= finest_level; ++lev) {
-        std::string name = "costs_lev";
-        name.append(std::to_string(lev));
-        graph.addFab(*costs[lev], name, sizeof(amrex::Real));
-        std::vector<double> costs_local(costs[lev]->local_size());
-        for (int n=0; n<costs[lev]->local_size(); ++n)
-        {
-            costs_local[n] = costs[lev]->data()[n];
-        }
-        double const scaling = 1.0;
-        bool const available_locally = false; // not all available on one MPI rank, with respect to costs_local
-        graph.addNodeWeight(name, "cost_value", costs_local, scaling, available_locally);
-    }
-
-    // E and B filling patterns (from WarpXComm.cpp)
-    for (int lev = 0; lev <= finest_level; ++lev)
-    {
-        std::array<amrex::MultiFab *, 3> mf;
-        amrex::Periodicity period;
-        amrex::IntVect ng = guard_cells.ng_alloc_EB;
-        // no MR or fine level of MR
-        //if (patch_type == PatchType::fine)
-        //{
-        mf = {Efield_fp[lev][0].get(), Efield_fp[lev][1].get(), Efield_fp[lev][2].get()};
-        period = Geom(lev).periodicity();
-        //}
-        //else // coarse patch (part of MR)
-        //{
-        //    mf     = {Efield_cp[lev][0].get(), Efield_cp[lev][1].get(), Efield_cp[lev][2].get()};
-        //    period = Geom(lev-1).periodicity();
-        //}
-        int const i = 0; // just the Ex component
-        const amrex::IntVect nghost = (safe_guard_cells) ? mf[i]->nGrowVect() : ng;
-        //FillBoundary(*mf[i], nghost, WarpX::do_single_precision_comms, period, nodal_sync);
-        std::string mf_name = "Efield_fp_lvl";
-        mf_name.append(std::to_string(lev));
-        double const scaling = 1.0;
-
-        graph.addFillBoundary("FillBoundaryE",
-                              mf_name,
-                              scaling,
-                              *mf[i],
-                              nghost,
-                              period);
-
-    }
-
-    // PML comm patterns (TODO) - see PML.cpp
-    // with and without do_pml_in_domain
-    //{
-    //graph.addParallelCopy("PML-comm", "tmpregmf", "totpmlmf", 0.0,
-    //                      tmpregmf, totpmlmf, 0, 0, 1, IntVect(0), ngr, period);
-    //}
-
-    // Capture Number of Particles per Box (TODO)
-
-    // Capture Particle Comm Patterns (TODO)
-
-    std::string graph_dir_name = "comm_data_step";
-    graph_dir_name.append(std::to_string(istep[0]+1));
-    graph.print_table(graph_dir_name);
 
     if (loadBalancedAnyLevel)
     {
@@ -393,8 +328,9 @@ WarpX::RemakeLevel (int lev, Real /*time*/, const BoxArray& ba, const Distributi
             for (int i : iarr)
             {
                 (*costs[lev])[i] = 0.0;
-                setLoadBalanceEfficiency(lev, -1);
             }
+
+            setLoadBalanceEfficiency(lev, -1);
         }
 
         SetDistributionMap(lev, dm);

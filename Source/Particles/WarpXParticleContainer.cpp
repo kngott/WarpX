@@ -438,6 +438,7 @@ WarpXParticleContainer::DepositCurrent (WarpXParIter& pti,
     WARPX_PROFILE_VAR_START(blp_deposit);
     amrex::LayoutData<amrex::Real> * const costs = WarpX::getCosts(lev);
     amrex::Real * const cost = costs ? &((*costs)[pti.index()]) : nullptr;
+    g_costptr = &((*g_temp[lev])[pti.index()]);
 
     if (WarpX::current_deposition_algo == CurrentDepositionAlgo::Esirkepov) {
         if        (WarpX::nox == 1){
@@ -526,10 +527,18 @@ WarpXParticleContainer::DepositCurrent (
     amrex::Vector<std::array< std::unique_ptr<amrex::MultiFab>, 3 > >& J,
     const amrex::Real dt, const amrex::Real relative_time)
 {
+#ifdef USE_GPUCLOCK
+    GraphResetTemps();
+    std::vector<double> scaling(finest_level, 0.0);
+#endif
+
     // Loop over the refinement levels
     int const finest_level = J.size() - 1;
     for (int lev = 0; lev <= finest_level; ++lev)
     {
+#ifdef USE_GPUCLOCK
+        double timer = amrex::second();
+#endif
         // Loop over particle tiles and deposit current on each level
 #ifdef AMREX_USE_OMP
 #pragma omp parallel if (amrex::Gpu::notInLaunchRegion())
@@ -559,7 +568,14 @@ WarpXParticleContainer::DepositCurrent (
 #ifdef AMREX_USE_OMP
         }
 #endif
+
+#ifdef USE_GPU_CLOCK
+        scaling[lev] = amrex::second() - timer;
+#endif
     }
+#ifdef USE_GPUCLOCK
+    GraphAddTemps(GraphFabName(), "DepositCurrent", scaling);
+#endif
 }
 
 /* \brief Charge Deposition for thread thread_num
