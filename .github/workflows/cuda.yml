@@ -37,8 +37,8 @@ jobs:
           ~/.cache/ccache
         key: ccache-cuda-nvcc-${{ hashFiles('.github/workflows/cuda.yml') }}-${{ hashFiles('cmake/dependencies/AMReX.cmake') }}
         restore-keys: |
-          ccache-cuda-nvcc-${{ hashFiles('.github/workflows/cuda.yml') }}-
-          ccache-cuda-nvcc-
+          ccache-cuda-nvcc-${{ hashFiles('.github/workflows/cuda.yml') }}
+          ccache-cuda-nvcc
     - name: install openPMD-api
       run: |
         export CEI_SUDO="sudo"
@@ -97,8 +97,8 @@ jobs:
           ~/.cache/ccache
         key: ccache-cuda-gnumake-${{ hashFiles('.github/workflows/cuda.yml') }}-${{ hashFiles('cmake/dependencies/AMReX.cmake') }}
         restore-keys: |
-          ccache-cuda-gnumake-${{ hashFiles('.github/workflows/cuda.yml') }}-
-          ccache-cuda-gnumake-
+          ccache-cuda-gnumake-${{ hashFiles('.github/workflows/cuda.yml') }}
+          ccache-cuda-gnumake
     - name: build WarpX
       run: |
         export PATH=/usr/local/nvidia/bin:/usr/local/cuda/bin:${PATH}
@@ -137,8 +137,8 @@ jobs:
           ~/.cache/ccache
         key: ccache-cuda-nvhpc-${{ hashFiles('.github/workflows/cuda.yml') }}-${{ hashFiles('cmake/dependencies/AMReX.cmake') }}
         restore-keys: |
-          ccache-cuda-nvhpc-${{ hashFiles('.github/workflows/cuda.yml') }}-
-          ccache-cuda-nvhpc-
+          ccache-cuda-nvhpc-${{ hashFiles('.github/workflows/cuda.yml') }}
+          ccache-cuda-nvhpc
     - name: Build & Install
       run: |
         source /etc/profile.d/modules.sh
