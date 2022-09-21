@@ -907,6 +907,9 @@ MultiParticleContainer::doFieldIonization (int lev,
     WARPX_PROFILE("MultiParticleContainer::doFieldIonization()");
 
     amrex::LayoutData<amrex::Real>* cost = WarpX::getCosts(lev);
+    WarpX& warpx = WarpX::GetInstance();
+    warpx.GraphClearTemps();
+    double scaling = amrex::second();
 
     // Loop over all species.
     // Ionized particles in pc_source create particles in pc_product
@@ -956,8 +959,14 @@ MultiParticleContainer::doFieldIonization (int lev,
                 amrex::Gpu::synchronize();
                 wt = amrex::second() - wt;
                 amrex::HostDevice::Atomic::Add( &(*cost)[pti.index()], wt);
+                amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[pti.index()], wt);
             }
         }
+    }
+    if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
+    {
+        scaling = amrex::second() - caling;
+        warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "FieldIonization", scaling);
     }
 }
 
@@ -1511,6 +1520,9 @@ void MultiParticleContainer::doQedBreitWheeler (int lev,
     WARPX_PROFILE("MultiParticleContainer::doQedBreitWheeler()");
 
     amrex::LayoutData<amrex::Real>* cost = WarpX::getCosts(lev);
+    WarpX& warpx = WarpX::GetInstance();
+    warpx.GraphClearTemps();
+    double scaling = amrex::second();
 
     // Loop over all species.
     // Photons undergoing Breit Wheeler process create electrons
@@ -1576,8 +1588,14 @@ void MultiParticleContainer::doQedBreitWheeler (int lev,
                 amrex::Gpu::synchronize();
                 wt = amrex::second() - wt;
                 amrex::HostDevice::Atomic::Add( &(*cost)[pti.index()], wt);
+                amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[pti.index()], wt);
             }
         }
+    }
+    if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
+    {
+        scaling = amrex::second() - scaling;
+        warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "QedBreitWheeler", scaling);
     }
 }
 
@@ -1592,6 +1610,9 @@ void MultiParticleContainer::doQedQuantumSync (int lev,
     WARPX_PROFILE("MultiParticleContainer::doQedQuantumSync()");
 
     amrex::LayoutData<amrex::Real>* cost = WarpX::getCosts(lev);
+    WarpX& warpx = WarpX::GetInstance();
+    warpx.GraphClearTemps();
+    double scaling = amrex::second();
 
     // Loop over all species.
     // Electrons or positrons undergoing Quantum photon emission process
@@ -1655,8 +1676,14 @@ void MultiParticleContainer::doQedQuantumSync (int lev,
                 amrex::Gpu::synchronize();
                 wt = amrex::second() - wt;
                 amrex::HostDevice::Atomic::Add( &(*cost)[pti.index()], wt);
+                amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[pti.index()], wt);
             }
         }
+    }
+    if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
+    {
+        scaling = amrex::second() - scaling;
+        warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "QedQuantumSync", scaling);
     }
 }
 

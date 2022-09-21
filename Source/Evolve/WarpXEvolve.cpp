@@ -49,8 +49,6 @@
 #include <AMReX_Utility.H>
 #include <AMReX_Vector.H>
 
-
-#include "Utils/WarpXGraph.H"
 #include <AMReX_Graph.H>
 
 #include <algorithm>
@@ -81,11 +79,11 @@ WarpX::Evolve (int numsteps)
 
     static Real evolve_time = 0;
 
-    graph.clear();
     GraphAddCellsandParticles();
 
     const int step_begin = istep[0];
-    for (int step = istep[0]; step < numsteps_max && cur_time < stop_time; ++step)
+    int step = istep[0];
+    for (; step < numsteps_max && cur_time < stop_time; ++step)
     {
         WARPX_PROFILE("WarpX::Evolve::step");
         Real evolve_time_beg_step = amrex::second();
@@ -130,8 +128,9 @@ WarpX::Evolve (int numsteps)
         // Print Graph for "previous" time step.
         // (So this "time step" is exclusively based on the new DM.)
 
-        std::string graph_name = "Step_" + ( (step==istep[0]) ? "Init" : std::to_string(step-1) );
-        GraphPrintandClear(graph_name);
+        std::string graph_name = "Step_" + std::to_string(step);
+        GraphPrintandClear(graph_name, 8);
+        GraphSetup();
         GraphAddCellsandParticles();
 
         // At the beginning, we have B^{n} and E^{n}.
@@ -385,7 +384,7 @@ WarpX::Evolve (int numsteps)
 
         // End loop on time steps
     }
-    GraphPrintandClear("Step_Final");
+    GraphPrintandClear("Step_"+std::to_string(step+1), 8);
 
     multi_diags->FilterComputePackFlushLastTimestep( istep[0] );
 
@@ -490,7 +489,11 @@ WarpX::OneStep_nosub (Real cur_time)
             amrex::Abort(Utils::TextMsg::Err("Medium for EM is unknown"));
         }
 
+        double scaling = amrex::second();
         FillBoundaryE(guard_cells.ng_FieldSolver, WarpX::sync_nodal_points);
+        scaling = amrex::second() - scaling;
+        WarpX::GraphAddFillBoundaryE(guard_cells.ng_FieldSolver, WarpX::sync_nodal_points, scaling);
+
         EvolveF(0.5_rt * dt[0], DtType::SecondHalf);
         EvolveG(0.5_rt * dt[0], DtType::SecondHalf);
         EvolveB(0.5_rt * dt[0], DtType::SecondHalf); // We now have B^{n+1}

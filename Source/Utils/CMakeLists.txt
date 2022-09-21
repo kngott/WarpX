@@ -8,6 +8,7 @@ target_sources(WarpX
     ParticleUtils.cpp
     RelativeCellPosition.cpp
     WarpXAlgorithmSelection.cpp
+    WarpXGraph.cpp
     WarpXMovingWindow.cpp
     WarpXTagging.cpp
     WarpXUtil.cpp

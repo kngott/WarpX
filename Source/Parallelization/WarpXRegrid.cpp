@@ -103,8 +103,8 @@ WarpX::LoadBalance () {
         ParallelDescriptor::Bcast(&doLoadBalance, 1,
                                   ParallelDescriptor::IOProcessorNumber());
 
-//      Do this to always to properly capture in graph.
-//        if (doLoadBalance) {
+        // Always to store results.
+        // if (doLoadBalance) {
 
         Vector<int> pmap;
         if (ParallelDescriptor::MyProc() == ParallelDescriptor::IOProcessorNumber()) {
@@ -112,23 +112,26 @@ WarpX::LoadBalance () {
         } else {
             pmap.resize(static_cast<std::size_t>(nboxes));
         }
-        ParallelDescriptor::Bcast(pmap.data(), pmap.size(), ParallelDescriptor::IOProcessorNumber());
 
-        if (ParallelDescriptor::MyProc() != ParallelDescriptor::IOProcessorNumber()) {
-            newdm = DistributionMapping(pmap);
-        }
+        GraphAddLoadBalance(lev, doLoadBalance, pmap, currentEfficiency, proposedEfficiency);
 
-        GraphAddLoadBalanceLevel(lev, doLoadBalance, pmap, currentEfficiency, proposedEfficiency);
-
+        // Only send and remake if DM is good.
         if (doLoadBalance) {
+
+            ParallelDescriptor::Bcast(pmap.data(), pmap.size(), ParallelDescriptor::IOProcessorNumber());
+
+            if (ParallelDescriptor::MyProc() != ParallelDescriptor::IOProcessorNumber()) {
+                newdm = DistributionMapping(pmap);
+            }
+
             RemakeLevel(lev, t_new[lev], boxArray(lev), newdm);
 
             // Record the load balance efficiency
             setLoadBalanceEfficiency(lev, proposedEfficiency);
-        }
+        } // doLoadBalance
 
         loadBalancedAnyLevel = loadBalancedAnyLevel || doLoadBalance;
-    }
+   } // lev
 
     if (loadBalancedAnyLevel)
     {

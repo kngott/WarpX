@@ -91,6 +91,9 @@ BackgroundStopping::doCollisions (amrex::Real cur_time, amrex::Real dt, MultiPar
     for (int lev = 0; lev <= flvl; ++lev) {
 
         auto cost = WarpX::getCosts(lev);
+        WarpX& warpx = WarpX::GetInstance();
+        warpx.GraphClearTemps();
+        double scaling = amrex::second();
 
         // loop over particles box by box
 #ifdef _OPENMP
@@ -114,9 +117,15 @@ BackgroundStopping::doCollisions (amrex::Real cur_time, amrex::Real dt, MultiPar
                 amrex::Gpu::synchronize();
                 wt = amrex::second() - wt;
                 amrex::HostDevice::Atomic::Add(&(*cost)[pti.index()], wt);
+                amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[pti.index()], wt);
+
             }
         }
-
+        if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
+        {
+            scaling = amrex::second() - scaling;
+            warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "StoppingCollision", scaling);
+        }
     }
 }
 

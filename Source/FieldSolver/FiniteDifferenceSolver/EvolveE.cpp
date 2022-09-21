@@ -107,6 +107,9 @@ void FiniteDifferenceSolver::EvolveECartesian (
 
     amrex::LayoutData<amrex::Real>* cost = WarpX::getCosts(lev);
     Real constexpr c2 = PhysConst::c * PhysConst::c;
+    WarpX& warpx = WarpX::GetInstance();
+    warpx.GraphClearTemps();
+    double scaling = amrex::second();
 
     // Loop through the grids, and over the tiles within each grid
 #ifdef AMREX_USE_OMP
@@ -218,9 +221,15 @@ void FiniteDifferenceSolver::EvolveECartesian (
             amrex::Gpu::synchronize();
             wt = amrex::second() - wt;
             amrex::HostDevice::Atomic::Add( &(*cost)[mfi.index()], wt);
+            amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[mfi.index()], wt);
         }
     }
 
+    if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
+    {
+        scaling = amrex::second() - scaling;
+        warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "EvolveECyl", scaling);
+    }
 }
 
 #else // corresponds to ifndef WARPX_DIM_RZ
@@ -234,6 +243,9 @@ void FiniteDifferenceSolver::EvolveECylindrical (
     int lev, amrex::Real const dt ) {
 
     amrex::LayoutData<amrex::Real>* cost = WarpX::getCosts(lev);
+    WarpX& warpx = WarpX::GetInstance();
+    warpx.GraphClearTemps();
+    double scaling = amrex::second();
 
     // Loop through the grids, and over the tiles within each grid
 #ifdef AMREX_USE_OMP
@@ -420,9 +432,15 @@ void FiniteDifferenceSolver::EvolveECylindrical (
             amrex::Gpu::synchronize();
             wt = amrex::second() - wt;
             amrex::HostDevice::Atomic::Add( &(*cost)[mfi.index()], wt);
+            amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[mfi.index()], wt);
         }
     } // end of loop over grid/tiles
 
+    if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
+    {
+        scaling = amrex::second() - scaling;
+        warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "EvolveECyl", scaling);
+    }
 }
 
 #endif // corresponds to ifndef WARPX_DIM_RZ

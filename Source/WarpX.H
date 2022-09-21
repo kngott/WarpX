@@ -37,7 +37,6 @@
 #include "Parallelization/GuardCellManager.H"
 #include "Utils/IntervalsParser.H"
 #include "Utils/WarpXAlgorithmSelection.H"
-#include "Utils/WarpXGraph.H"
 
 #include <AMReX.H>
 #include <AMReX_AmrCore.H>
@@ -1281,22 +1280,31 @@ private:
      * time per iteration per particle is computed. */
     amrex::Real costs_heuristic_particles_wt = amrex::Real(0);
 
+public:
     // Graph stuff.
     amrex::Graph graph;
     // Saved data pieces.
     amrex::Vector<std::unique_ptr<amrex::LayoutData<amrex::Real> > > g_temp;
     amrex::Vector<amrex::Vector<int> > g_new_dmap;
-    amrex::Vector<bool> g_do_load_balance = false;
+    amrex::Vector<bool> g_do_load_balance;
     std::string g_fabname = "Ex";
-    Real* g_costptr = nullptr;
+    amrex::Real* g_costptr = nullptr;
 
-    std::string GraphFabName(int lev);
+    std::string GraphFabName();
+    std::string GraphFabName(int lev, PatchType pt = PatchType::fine);
+    void GraphSetup();
+    void GraphSetup(const int lev, const amrex::BoxArray& ba, const amrex::DistributionMapping& dm);
+    void GraphClearTemps();
     void GraphAddCellsandParticles();
+    void GraphAddTemps(int lev, const std::string& fab_name, const std::string& wgt_name, const double scaling);
+    void GraphAddTemps(const std::string& fab_name, const std::string& wgt_name, const std::vector<double>& scaling);
     void GraphAddTemps(const std::string& fab_name, const std::string& wgt_name, const double scaling);
-    void GraphAddLoadBalance(const int lev, const bool do_load_balance, const Vector<int>& new_dm,
-                             const Real currentEfficiency, const Real proposedEfficiency);
-    void GraphPrintandClear(const std::string& graph_name);
+    void GraphAddLoadBalance(const int lev, const bool do_load_balance, const amrex::Vector<int>& new_dm,
+                             const amrex::Real currentEfficiency, const amrex::Real proposedEfficiency);
+    void GraphAddFillBoundaryE(const amrex::IntVect& ng, const bool nodal_sync, const double scaling);
+    void GraphPrintandClear(const std::string& graph_name, const int precision);
 
+private:
     // Determines timesteps for override sync
     IntervalsParser override_sync_intervals;
 

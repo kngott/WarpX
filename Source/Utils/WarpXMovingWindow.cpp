@@ -357,6 +357,10 @@ WarpX::shiftMF (amrex::MultiFab& mf, const amrex::Geometry& geom,
     const auto dx = geom.CellSizeArray();
 
     amrex::LayoutData<amrex::Real>* cost = WarpX::getCosts(lev);
+    WarpX& warpx = WarpX::GetInstance();
+    warpx.GraphClearTemps();
+    double scaling = amrex::second();
+
 #ifdef AMREX_USE_OMP
 #pragma omp parallel if (Gpu::notInLaunchRegion())
 #endif
@@ -433,7 +437,14 @@ WarpX::shiftMF (amrex::MultiFab& mf, const amrex::Geometry& geom,
             amrex::Gpu::synchronize();
             wt = amrex::second() - wt;
             amrex::HostDevice::Atomic::Add( &(*cost)[mfi.index()], wt);
+            amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[mfi.index()], wt);
         }
+    }
+
+    if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
+    {
+        scaling = amrex::second() - scaling;
+        warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "ShiftMF", scaling);
     }
 
 #if (defined WARPX_DIM_RZ) && (defined WARPX_USE_PSATD)

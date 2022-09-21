@@ -2156,6 +2156,8 @@ WarpX::AllocLevelMFs (int lev, const BoxArray& ba, const DistributionMapping& dm
     {
         costs[lev] = std::make_unique<LayoutData<Real>>(ba, dm);
         load_balance_efficiency[lev] = -1;
+
+        GraphSetup(lev, ba, dm);
     }
 }
 

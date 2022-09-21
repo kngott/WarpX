@@ -102,6 +102,8 @@ WarpX::Hybrid_QED_Push (int lev, PatchType patch_type, amrex::Real a_dt)
     }
 
     amrex::LayoutData<amrex::Real>* cost = WarpX::getCosts(lev);
+    GraphClearTemps();
+    double scaling = amrex::second();
 
     // Loop through the grids, and over the tiles within each grid
 #ifdef AMREX_USE_OMP
@@ -187,6 +189,13 @@ WarpX::Hybrid_QED_Push (int lev, PatchType patch_type, amrex::Real a_dt)
             amrex::Gpu::synchronize();
             wt = static_cast<Real>(amrex::second()) - wt;
             amrex::HostDevice::Atomic::Add( &(*cost)[mfi.index()], wt);
+            amrex::HostDevice::Atomic::Add( &(*g_temp[lev])[mfi.index()], wt);
         }
+    }
+
+    if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
+    {
+        scaling = amrex::second() - scaling;
+        GraphAddTemps(lev, GraphFabName(lev), "QED_Push", scaling);
     }
 }

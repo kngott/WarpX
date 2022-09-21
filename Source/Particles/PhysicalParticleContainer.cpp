@@ -866,6 +866,9 @@ PhysicalParticleContainer::AddPlasma (int lev, RealBox part_realbox)
     defineAllParticleTiles();
 
     amrex::LayoutData<amrex::Real>* cost = WarpX::getCosts(lev);
+    WarpX& warpx = WarpX::GetInstance();
+    warpx.GraphClearTemps();
+    double scaling = amrex::second();
 
     const int nlevs = numLevels();
     static bool refine_injection = false;
@@ -1325,7 +1328,14 @@ PhysicalParticleContainer::AddPlasma (int lev, RealBox part_realbox)
         {
             wt = amrex::second() - wt;
             amrex::HostDevice::Atomic::Add( &(*cost)[mfi.index()], wt);
+            amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[mfi.index()], wt);
         }
+    }
+
+    if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
+    {
+        scaling = amrex::second() - scaling;
+        warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "AddPlasma", scaling);
     }
 
     // The function that calls this is responsible for redistributing particles.
@@ -1816,6 +1826,9 @@ PhysicalParticleContainer::Evolve (int lev,
     BL_ASSERT(OnSameGrids(lev,jx));
 
     amrex::LayoutData<amrex::Real>* cost = WarpX::getCosts(lev);
+    WarpX& warpx = WarpX::GetInstance();
+    warpx.GraphClearTemps();
+    double scaling = amrex::second();
 
     const iMultiFab* current_masks = WarpX::CurrentBufferMasks(lev);
     const iMultiFab* gather_masks = WarpX::GatherBufferMasks(lev);
@@ -2031,9 +2044,17 @@ PhysicalParticleContainer::Evolve (int lev,
             {
                 wt = amrex::second() - wt;
                 amrex::HostDevice::Atomic::Add( &(*cost)[pti.index()], wt);
+                amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[pti.index()], wt);
             }
         }
     }
+
+    if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
+    {
+        scaling = amrex::second() - scaling;
+        warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "EvolvePPC", scaling);
+    }
+
     // Split particles at the end of the timestep.
     // When subcycling is ON, the splitting is done on the last call to
     // PhysicalParticleContainer::Evolve on the finest level, i.e., at the

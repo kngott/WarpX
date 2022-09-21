@@ -1,50 +1,90 @@
-#include "AMReX_Graph.H"
-#include "Utils/WarpXGraph.H"
+#include <WarpX.H>
+#include "Particles/MultiParticleContainer.H"
+#include "ablastr/utils/Communication.H"
+#include <AMReX_Graph.H>
 
 std::string
-WarpX::GraphFabName()
+WarpX::GraphFabName ()
 {
-    return ("Ex_lev");
+    return g_fabname;
 }
 
+// Costs is based on fine, so default to fine.
 std::string
-WarpX::GraphFabName(int lev)
+WarpX::GraphFabName (int lev, PatchType pt)
 {
-    return ("Ex_lev" + std::to_string(lev));
+    return (g_fabname + ((pt == PatchType::fine) ? "_f_" : "_c_" ) + std::to_string(lev));
 }
 
 void
-WarpX::GraphResetTemps()
+WarpX::GraphSetup ()
 {
-    for (int lev = 0; lev <= finest_level(); ++lev)
+    BL_PROFILE("GraphSetup()");
+    graph.clear();
+
+    const int finest_level = Efield_fp.size();
+    g_temp.resize(finest_level);
+    for (int lev = 0; lev < finest_level; ++lev) {
+        amrex::MultiFab* Ex = Efield_fp[lev][0].get();
+
+        g_temp[lev] = std::make_unique<amrex::LayoutData<amrex::Real>>(boxArray(lev), Ex->DistributionMap());
+    }
+}
+
+void
+WarpX::GraphSetup (const int lev, const amrex::BoxArray& ba, const amrex::DistributionMapping& dm)
+{
+    BL_PROFILE("GraphSetup(lev, ba, dm)");
+    graph.clear();
+
+    if (lev >= g_temp.size()) {
+        g_temp.resize(lev+1);
+    }
+
+    g_temp[lev] = std::make_unique<amrex::LayoutData<amrex::Real>>(ba, dm);
+}
+
+
+void
+WarpX::GraphClearTemps ()
+{
+    BL_PROFILE("GraphClearTemps()");
+    const int finest_level = g_temp.size();
+
+    for (int lev = 0; lev < finest_level; ++lev)
     {
         const auto iarr = g_temp[lev]->IndexArray();
+
         for (int i : iarr) {
-            (*g_temp[lev])(i) = 0.0;
+            (*g_temp[lev])[i] = 0.0;
         }
     }
 }
 
 void
-WarpX::GraphAddTemps(int lev, const std::string& fab_name, const std::string& wgt_name, const double scaling)
+WarpX::GraphAddTemps (int lev, const std::string& fab_name, const std::string& wgt_name, const double scaling)
 {
-    graph.addLayoutData(*g_temp[lev], fab_name + std::to_string(lev), sizeof(amrex::Real),
+    // sizeof(amrex::Real) is expected size of Fab data. Change/make an input if needed.
+
+    graph.addLayoutData(*g_temp[lev], fab_name, sizeof(amrex::Real),
                         wgt_name, scaling);
 }
 
 void
-WarpX::GraphAddTemps(const std::string& fab_name, const std::string& wgt_name, const std::vector<double>& scaling)
+WarpX::GraphAddTemps (const std::string& fab_name, const std::string& wgt_name, const std::vector<double>& scaling)
 {
-    for (int lev = 0; lev <= finest_level(); ++lev)
+    const int finest_level = g_temp.size();
+    for (int lev = 0; lev < finest_level; ++lev)
     {
-        GraphAddTemps(lev, fab_name, wgt_name, scaling[lev]);
+        GraphAddTemps(lev, fab_name + std::to_string(lev), wgt_name, scaling[lev]);
     }
 }
 
 void
-WarpX::GraphAddTemps(const std::string& fab_name, const std::string& wgt_name, const double& scaling)
+WarpX::GraphAddTemps (const std::string& fab_name, const std::string& wgt_name, const double scaling)
 {
-    for (int lev = 0; lev <= finest_level(); ++lev)
+    const int finest_level = g_temp.size();
+    for (int lev = 0; lev < finest_level; ++lev)
     {
         GraphAddTemps(lev, fab_name, wgt_name, scaling);
     }
@@ -52,20 +92,20 @@ WarpX::GraphAddTemps(const std::string& fab_name, const std::string& wgt_name, c
 
 
 void
-WarpX::GraphAddCellsandParticles()
+WarpX::GraphAddCellsandParticles ()
 {
-    for (int lev = 0; lev <= finest_level(); ++lev) {
+    BL_PROFILE("GraphAddCellsandParticles()");
+    const int finest_level = g_temp.size();
 
+    for (int lev = 0; lev < finest_level; ++lev) {
         amrex::MultiFab* Ex = Efield_fp[lev][0].get();
         std::string fab_name = GraphFabName(lev);
 
-        g_temp[lev] = std::make_unique<LayoutData<Real>>(boxArray(lev), Ex.DistributionMapping());
-
-        GraphResetTemps();
+        GraphClearTemps();
         // =========================
         // Add cells
-        for (MFIter mfi(*Ex, false); mfi.isValid(); ++mfi) {
-            const Box& gbx = mfi.growntilebox();
+        for (amrex::MFIter mfi(*Ex, false); mfi.isValid(); ++mfi) {
+            const amrex::Box& gbx = mfi.growntilebox();
             (*g_temp[lev])[mfi.index()] += gbx.numPts();
         }
 
@@ -78,12 +118,12 @@ WarpX::GraphAddCellsandParticles()
         const auto& mypc_ref = GetInstance().GetPartContainer();
         const auto nSpecies = mypc_ref.nSpecies();
 
-        for (int i_s = 0; i_s < nSpecies, ++i_s) {
-            GraphResetTemps();
+        for (int i_s = 0; i_s < nSpecies; ++i_s) {
+            GraphClearTemps();
 
             auto & myspc = mypc_ref.GetParticleContainer(i_s);
             for (WarpXParIter pti(myspc, lev); pti.isValid(); ++pti) {
-                (*g_temp[lev])[mfi.index()] += pti.numParticles();
+                (*g_temp[lev])[pti.index()] += pti.numParticles();
             }
 
             weight_name = "n" + mypc_ref.GetSpeciesNames()[i_s];
@@ -94,9 +134,10 @@ WarpX::GraphAddCellsandParticles()
 }
 
 void
-WarpX::GraphAddLoadBalance(const int lev, const bool do_load_balance, const Vector<int>& new_dm,
-                           const Real currentEfficiency, const Real proposedEfficiency)
+WarpX::GraphAddLoadBalance (const int lev, const bool do_load_balance, const amrex::Vector<int>& new_dm,
+                            const amrex::Real currentEfficiency, const amrex::Real proposedEfficiency)
 {
+    BL_PROFILE("GraphAddLoadBalance()");
     std::string fab_name = GraphFabName(lev);
     std::string wgt_name = "costs";
 
@@ -107,12 +148,59 @@ WarpX::GraphAddLoadBalance(const int lev, const bool do_load_balance, const Vect
     // Add generated mapping, with scale equaling proposedEfficiency
     // Use the name to show whether load balance occurred.
     wgt_name = (do_load_balance) ? "new_dm" : "unused_dm";
-    graph.addNodeWeight(fab_name, wgt_name, new_dm, double(propsedEfficiency), true);
+    graph.addNodeWeight(fab_name, wgt_name, new_dm, proposedEfficiency, true);
 }
 
 void
-WarpX::GraphPrintandClear(const std::string& graph_name)
+WarpX::GraphAddFillBoundaryE(const amrex::IntVect& ng, const bool nodal_sync, const double scaling)
 {
-    graph.print_table(graph_name);
+    BL_PROFILE("GraphAddFillBoundary()");
+    // Long term alternative: optional name string. Named calls get added to Graph.
+    // Generalize with an enum to select the MF to use?
+    // i.e. WarpXData::E, WarpXData::B ...
+
+    for (int lev=0; lev <= finest_level; ++lev)
+    {
+        std::size_t buffer_size = (do_single_precision_comms) ?
+                             sizeof(ablastr::utils::communication::comm_float_type) : 0;
+
+        int nComp = Efield_fp[lev][0]->nComp();
+
+
+        if (nodal_sync) {
+            graph.addFillBoundaryAndSync("FB&S_Ex_f_" + std::to_string(lev),
+                                          GraphFabName(lev, PatchType::fine), scaling,
+                                          *Efield_fp[lev][0], 0, nComp,
+                                          ng, Geom(lev).periodicity(),
+                                          buffer_size);
+            if (lev>0) {
+                graph.addFillBoundaryAndSync("FB&S_Ex_c_" + std::to_string(lev),
+                                              GraphFabName(lev, PatchType::coarse), scaling,
+                                              *Efield_cp[lev][0], 0, nComp,
+                                              ng, Geom(lev-1).periodicity(),
+                                              buffer_size);
+            }
+        } else {
+            graph.addFillBoundary("FB_Ex_f_" + std::to_string(lev),
+                                  GraphFabName(lev, PatchType::fine), scaling,
+                                  *Efield_fp[lev][0], 0, nComp, ng,
+                                  Geom(lev).periodicity(), false, buffer_size);
+            if (lev>0) {
+                graph.addFillBoundary("FB_Ex_c_" + std::to_string(lev),
+                                      GraphFabName(lev, PatchType::coarse), scaling,
+                                      *Efield_cp[lev][0], 0, nComp, ng,
+                                      Geom(lev-1).periodicity(), false, buffer_size);
+            }
+        }
+    }
+}
+
+void
+WarpX::GraphPrintandClear (const std::string& graph_name, const int precision = 5)
+{
+    BL_PROFILE("GraphPrintandClear()");
+    graph.print_table(graph_name, precision);
     graph.clear();
+
+    amrex::ParallelDescriptor::Barrier();
 }

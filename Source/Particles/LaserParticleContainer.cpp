@@ -549,6 +549,9 @@ LaserParticleContainer::Evolve (int lev,
     BL_ASSERT(OnSameGrids(lev,jx));
 
     amrex::LayoutData<amrex::Real>* cost = WarpX::getCosts(lev);
+    WarpX& warpx = WarpX::GetInstance();
+    warpx.GraphClearTemps();
+    double scaling = amrex::second();
 
 #ifdef AMREX_USE_OMP
 #pragma omp parallel if (amrex::Gpu::notInLaunchRegion())
@@ -656,8 +659,14 @@ LaserParticleContainer::Evolve (int lev,
             {
                 wt = static_cast<Real>(amrex::second()) - wt;
                 amrex::HostDevice::Atomic::Add( &(*cost)[pti.index()], wt);
+                amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[pti.index()], wt);
             }
         }
+    }
+    if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
+    {
+        scaling = amrex::second() - scaling;
+        warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "LaserEvolve", scaling);
     }
 }
 

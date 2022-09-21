@@ -164,6 +164,9 @@ public:
         for (int lev = 0; lev <= species1.finestLevel(); ++lev){
 
         amrex::LayoutData<amrex::Real>* cost = WarpX::getCosts(lev);
+        WarpX& warpx = WarpX::GetInstance();
+        warpx.GraphClearTemps();
+        double scaling = amrex::second();
 
             // Loop over all grids/tiles at this level
 #ifdef AMREX_USE_OMP
@@ -185,8 +188,11 @@ public:
                     amrex::Gpu::synchronize();
                     wt = amrex::second() - wt;
                     amrex::HostDevice::Atomic::Add( &(*cost)[mfi.index()], wt);
+                    amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[mfi.index()], wt);
                 }
             }
+            scaling = amrex::second() - scaling;
+            warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "BinaryCollision", scaling);
         }
     }
 

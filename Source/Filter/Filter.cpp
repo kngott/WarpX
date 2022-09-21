@@ -40,6 +40,9 @@ Filter::ApplyStencil (MultiFab& dstmf, const MultiFab& srcmf, const int lev, int
     ncomp = std::min(ncomp, srcmf.nComp());
 
     amrex::LayoutData<amrex::Real>* cost = WarpX::getCosts(lev);
+    WarpX& warpx = WarpX::GetInstance();
+    warpx.GraphClearTemps();
+    double scaling = amrex::second();
 
     for (MFIter mfi(dstmf); mfi.isValid(); ++mfi)
     {
@@ -61,7 +64,13 @@ Filter::ApplyStencil (MultiFab& dstmf, const MultiFab& srcmf, const int lev, int
             amrex::Gpu::synchronize();
             wt = amrex::second() - wt;
             amrex::HostDevice::Atomic::Add( &(*cost)[mfi.index()], wt);
+            amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[mfi.index()], wt);
         }
+    }
+    if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
+    {
+        scaling = amrex::second() - scaling;
+        warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "ApplyStencil", scaling);
     }
 }
 
@@ -205,6 +214,9 @@ Filter::ApplyStencil (amrex::MultiFab& dstmf, const amrex::MultiFab& srcmf, cons
     ncomp = std::min(ncomp, srcmf.nComp());
 
     amrex::LayoutData<amrex::Real>* cost = WarpX::getCosts(lev);
+    WarpX& warpx = WarpX::GetInstance();
+    warpx.GraphClearTemps();
+    double scaling = amrex::second();
 
 #ifdef AMREX_USE_OMP
 // never runs on GPU since in the else branch of AMREX_USE_GPU
@@ -238,8 +250,14 @@ Filter::ApplyStencil (amrex::MultiFab& dstmf, const amrex::MultiFab& srcmf, cons
                 amrex::Gpu::synchronize();
                 wt = amrex::second() - wt;
                 amrex::HostDevice::Atomic::Add( &(*cost)[mfi.index()], wt);
+                amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[mfi.index()], wt);
             }
         }
+    }
+    if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
+    {
+        scaling = amrex::second() - scaling;
+        warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "ApplyStencil", scaling);
     }
 }
 

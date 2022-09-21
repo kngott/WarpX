@@ -979,16 +979,52 @@ void WarpX::ApplyFilterandSumBoundaryJ (
             ng_depos_J[2] += WarpX::current_centering_noz / 2;
 #endif
         }
+
+        amrex::IntVect n_updated_guards;
+        std::size_t buff_size;
+
+        // Capture X direction in graph
+        if (idim == 0) {
+            n_updated_guards = (WarpX::maxwell_solver_id == MaxwellSolverAlgo::PSATD) ?
+                               j[idim]->nGrowVect() : amrex::IntVect::TheZeroVector();
+            buff_size = (do_single_precision_comms) ?
+                         sizeof(ablastr::utils::communication::comm_float_type) : 0;
+        }
+
+
         if (use_filter) {
+            double scaling = amrex::second();
+
             ng += bilinear_filter.stencil_length_each_dir-1;
             ng_depos_J += bilinear_filter.stencil_length_each_dir-1;
             ng_depos_J.min(ng);
             MultiFab jf(j[idim]->boxArray(), j[idim]->DistributionMap(), j[idim]->nComp(), ng);
             bilinear_filter.ApplyStencil(jf, *j[idim], lev);
             WarpXSumGuardCells(*(j[idim]), jf, period, ng_depos_J, 0, (j[idim])->nComp());
+
+            scaling = amrex::second() - scaling;
+
+            // Capture X direction in graph
+            if (idim == 0) {
+                graph.addParallelCopy("AF&SB_Jx",
+                                      GraphFabName(lev, patch_type), GraphFabName(lev, patch_type), scaling,
+                                      *(j[idim]), jf, 0, 0, (j[idim])->nComp(), ng_depos_J, n_updated_guards, period,
+                                      FabArrayBase::ADD, nullptr, false, buff_size);
+            }
         } else {
+            double scaling = amrex::second();
+
             ng_depos_J.min(ng);
             WarpXSumGuardCells(*(j[idim]), period, ng_depos_J, 0, (j[idim])->nComp());
+
+            scaling = amrex::second() - scaling;
+
+            // Capture X direction in graph
+            if (idim == 0) {
+                graph.addSumBoundary("AF&SB_Jx", GraphFabName(lev, patch_type), scaling,
+                                     *(j[idim]), 0, (j[idim])->nComp(), ng_depos_J, n_updated_guards, period,
+                                     buff_size);
+            }
         }
     }
 }
@@ -1053,7 +1089,6 @@ void WarpX::AddCurrentFromFineLevelandSumBoundary (
                 MultiFab::Add(jfb, jfc, 0, 0, current_buf[lev+1][idim]->nComp(), ng);
                 ablastr::utils::communication::ParallelAdd(mf, jfb, 0, 0, current_buf[lev + 1][idim]->nComp(),
                                                            ng, IntVect::TheZeroVector(), WarpX::do_single_precision_comms, period);
-
                 WarpXSumGuardCells(*J_cp[lev+1][idim], jfc, period, ng_depos_J, 0, J_cp[lev+1][idim]->nComp());
             }
             else if (use_filter) // but no buffer

@@ -79,6 +79,9 @@ void FiniteDifferenceSolver::EvolveRhoCartesianECT (
 #endif
 
     amrex::LayoutData<amrex::Real>* cost = WarpX::getCosts(lev);
+    WarpX& warpx = WarpX::GetInstance();
+    warpx.GraphClearTemps();
+    double scaling = amrex::second();
 
     // Loop through the grids, and over the tiles within each grid
 #ifdef AMREX_USE_OMP
@@ -151,11 +154,18 @@ void FiniteDifferenceSolver::EvolveRhoCartesianECT (
             amrex::Gpu::synchronize();
             wt = amrex::second() - wt;
             amrex::HostDevice::Atomic::Add( &(*cost)[mfi.index()], wt);
+            amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[mfi.index()], wt);
         }
 #ifdef WARPX_DIM_XZ
         amrex::ignore_unused(Ey, Rhox, Rhoz, ly);
 #endif
     }
+    if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
+    {
+        scaling = amrex::second()- scaling;
+        warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "EvolveRhoCartECT", scaling);
+    }
+
 #else
     amrex::ignore_unused(Efield, edge_lengths, face_areas, ECTRhofield, lev);
 #endif

@@ -265,6 +265,9 @@ BackgroundMCCCollision::doCollisions (amrex::Real cur_time, amrex::Real dt, Mult
     for (int lev = 0; lev <= flvl; ++lev) {
 
         auto cost = WarpX::getCosts(lev);
+        WarpX& warpx = WarpX::GetInstance();
+        warpx.GraphClearTemps();
+        double scaling = amrex::second();
 
         // firstly loop over particles box by box and do all particle conserving
         // scattering
@@ -285,7 +288,13 @@ BackgroundMCCCollision::doCollisions (amrex::Real cur_time, amrex::Real dt, Mult
                 amrex::Gpu::synchronize();
                 wt = amrex::second() - wt;
                 amrex::HostDevice::Atomic::Add( &(*cost)[pti.index()], wt);
+                amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[pti.index()], wt);
             }
+        }
+        if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
+        {
+            scaling = scaling - amrex::second();
+            warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "MCCCollision", scaling);
         }
 
         // secondly perform ionization through the SmartCopyFactory if needed
@@ -466,6 +475,10 @@ void BackgroundMCCCollision::doBackgroundIonization
 
     amrex::ParticleReal sqrt_kb_m = std::sqrt(PhysConst::kb / m_background_mass);
 
+    WarpX& warpx = WarpX::GetInstance();
+    warpx.GraphClearTemps();
+    double scaling = amrex::second();
+
 #ifdef AMREX_USE_OMP
 #pragma omp parallel if (amrex::Gpu::notInLaunchRegion())
 #endif
@@ -501,6 +514,12 @@ void BackgroundMCCCollision::doBackgroundIonization
             amrex::Gpu::synchronize();
             wt = amrex::second() - wt;
             amrex::HostDevice::Atomic::Add( &(*cost)[pti.index()], wt);
+            amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[pti.index()], wt);
         }
+    }
+    if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
+    {
+        scaling = amrex::second() - scaling;
+        warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "MCCIonization", scaling);
     }
 }

@@ -438,7 +438,6 @@ WarpXParticleContainer::DepositCurrent (WarpXParIter& pti,
     WARPX_PROFILE_VAR_START(blp_deposit);
     amrex::LayoutData<amrex::Real> * const costs = WarpX::getCosts(lev);
     amrex::Real * const cost = costs ? &((*costs)[pti.index()]) : nullptr;
-    g_costptr = &((*g_temp[lev])[pti.index()]);
 
     if (WarpX::current_deposition_algo == CurrentDepositionAlgo::Esirkepov) {
         if        (WarpX::nox == 1){
@@ -527,18 +526,10 @@ WarpXParticleContainer::DepositCurrent (
     amrex::Vector<std::array< std::unique_ptr<amrex::MultiFab>, 3 > >& J,
     const amrex::Real dt, const amrex::Real relative_time)
 {
-#ifdef USE_GPUCLOCK
-    GraphResetTemps();
-    std::vector<double> scaling(finest_level, 0.0);
-#endif
-
     // Loop over the refinement levels
     int const finest_level = J.size() - 1;
     for (int lev = 0; lev <= finest_level; ++lev)
     {
-#ifdef USE_GPUCLOCK
-        double timer = amrex::second();
-#endif
         // Loop over particle tiles and deposit current on each level
 #ifdef AMREX_USE_OMP
 #pragma omp parallel if (amrex::Gpu::notInLaunchRegion())
@@ -547,6 +538,18 @@ WarpXParticleContainer::DepositCurrent (
 #else
         int thread_num = 0;
 #endif
+
+#ifdef WARPX_USE_GPUCLOCK
+        WarpX& warpx = WarpX::GetInstance();
+        double scaling = amrex::second();
+        amrex::LayoutData<amrex::Real>* costs = WarpX::getCosts(lev);
+        if (costs && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::GpuClock)
+        {
+            warpx.GraphClearTemps();
+            *(warpx.g_temp[lev]) = *costs;
+        }
+#endif
+
         for (WarpXParIter pti(*this, lev); pti.isValid(); ++pti)
         {
             const long np = pti.numParticles();
@@ -569,13 +572,19 @@ WarpXParticleContainer::DepositCurrent (
         }
 #endif
 
-#ifdef USE_GPU_CLOCK
-        scaling[lev] = amrex::second() - timer;
+#ifdef WARPX_USE_GPUCLOCK
+        if (costs && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::GpuClock)
+        {
+            scaling = amrex::second() - scaling;
+            for (int i=0; i<costs->local_size(); ++i) {
+                (warpx.g_temp[lev])->data()[i] = costs->data()[i] - (warpx.g_temp[lev])->data()[i];
+            }
+            warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "DepositCurrent", scaling);
+        }
 #endif
+
+
     }
-#ifdef USE_GPUCLOCK
-    GraphAddTemps(GraphFabName(), "DepositCurrent", scaling);
-#endif
 }
 
 /* \brief Charge Deposition for thread thread_num
@@ -682,6 +691,18 @@ WarpXParticleContainer::DepositCharge (amrex::Vector<std::unique_ptr<amrex::Mult
 #else
         int thread_num = 0;
 #endif
+
+#ifdef WARPX_USE_GPUCLOCK
+        WarpX& warpx = WarpX::GetInstance();
+        double scaling = amrex::second();
+        amrex::LayoutData<amrex::Real>* costs = WarpX::getCosts(lev);
+        if (costs && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::GpuClock)
+        {
+            warpx.GraphClearTemps();
+            *(warpx.g_temp[lev]) = *costs;
+        }
+#endif
+
         for (WarpXParIter pti(*this, lev); pti.isValid(); ++pti)
         {
             const long np = pti.numParticles();
@@ -696,6 +717,17 @@ WarpXParticleContainer::DepositCharge (amrex::Vector<std::unique_ptr<amrex::Mult
             DepositCharge(pti, wp, ion_lev, rho[lev].get(), icomp, 0, np, thread_num, lev, lev);
         }
 #ifdef AMREX_USE_OMP
+        }
+#endif
+
+#ifdef WARPX_USE_GPUCLOCK
+        if (costs && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::GpuClock)
+        {
+            scaling = amrex::second() - scaling;
+            for (int i=0; i<costs->local_size(); ++i) {
+                (warpx.g_temp[lev])->data()[i] = costs->data()[i] - (warpx.g_temp[lev])->data()[i];
+            }
+            warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "DepositCharge", scaling);
         }
 #endif
 
@@ -958,6 +990,9 @@ WarpXParticleContainer::PushX (int lev, amrex::Real dt)
     if (do_not_push) return;
 
     amrex::LayoutData<amrex::Real>* costs = WarpX::getCosts(lev);
+    WarpX& warpx = WarpX::GetInstance();
+    warpx.GraphClearTemps();
+    double scaling = amrex::second();
 
 #ifdef AMREX_USE_OMP
 #pragma omp parallel if (amrex::Gpu::notInLaunchRegion())
@@ -1000,8 +1035,14 @@ WarpXParticleContainer::PushX (int lev, amrex::Real dt)
                 amrex::Gpu::synchronize();
                 wt = amrex::second() - wt;
                 amrex::HostDevice::Atomic::Add( &(*costs)[pti.index()], wt);
+                amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[pti.index()], wt);
             }
         }
+    }
+    if (costs && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
+    {
+        scaling = amrex::second() - scaling;
+        warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "PushX", scaling);
     }
 }
 
