@@ -109,7 +109,7 @@ jobs:
         export LD_LIBRARY_PATH=/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib64:${LD_LIBRARY_PATH}
         which nvcc || echo "nvcc not in PATH!"
         git clone https://github.com/kngott/amrex.git ../amrex
-        cd amrex && git checkout --detach kngott/graphviz && cd - 
+        cd amrex && git checkout --detach kngott/graphviz && cd -
 #       CHANGE: Target graph branch
 #        git clone https://github.com/AMReX-Codes/amrex.git ../amrex
 #        cd amrex && git checkout --detach 9aa23c202a13eee489a06030b9aeda6b89856944 && cd -

@@ -1030,7 +1030,7 @@ void WarpX::SumBoundaryJ (
     scaling = amrex::second() - scaling;
 
     // Capture X direction in graph
-    // Currently hard-set to `PatchType::fine`, due to tests being ran. 
+    // Currently hard-set to `PatchType::fine`, due to tests being ran.
     if (idim == 0) {
         graph.addSumBoundary("AF&SB_Jx", GraphFabName(lev, PatchType::fine), scaling,
                              J, icomp, ncomp, src_ngrow, n_updated_guards, period, buff_size);
