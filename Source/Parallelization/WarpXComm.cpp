@@ -1031,10 +1031,9 @@ void WarpX::SumBoundaryJ (
 
     // Capture X direction in graph
     if (idim == 0) {
-        graph.addSumBoundary("AF&SB_Jx", GraphFabName(lev, patch_type), scaling,
+        graph.addSumBoundary("AF&SB_Jx", GraphFabName(lev, PatchType::fine), scaling,
                              J, icomp, ncomp, src_ngrow, n_updated_guards, period, buff_size);
     }
-
 }
 
 void WarpX::SumBoundaryJ (
