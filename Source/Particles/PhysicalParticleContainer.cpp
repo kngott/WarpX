@@ -1327,7 +1327,7 @@ PhysicalParticleContainer::AddPlasma (int lev, RealBox part_realbox)
         {
             wt = amrex::second() - wt;
             amrex::HostDevice::Atomic::Add( &(*cost)[mfi.index()], wt);
-            amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[mfi.index()], wt);
+            amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[mfi.index()], double(wt));
         }
     }
 
@@ -2072,7 +2072,7 @@ PhysicalParticleContainer::Evolve (int lev,
             {
                 wt = amrex::second() - wt;
                 amrex::HostDevice::Atomic::Add( &(*cost)[pti.index()], wt);
-                amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[pti.index()], wt);
+                amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[pti.index()], double(wt));
             }
         }
     }

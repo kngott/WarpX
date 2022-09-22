@@ -663,7 +663,7 @@ LaserParticleContainer::Evolve (int lev,
             {
                 wt = static_cast<Real>(amrex::second()) - wt;
                 amrex::HostDevice::Atomic::Add( &(*cost)[pti.index()], wt);
-                amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[pti.index()], wt);
+                amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[pti.index()], double(wt));
             }
         }
     }

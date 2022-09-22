@@ -546,7 +546,9 @@ WarpXParticleContainer::DepositCurrent (
         if (costs && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::GpuClock)
         {
             warpx.GraphClearTemps();
-            *(warpx.g_temp[lev]) = *costs;
+            for (int i=0; i<costs->local_size(); ++i) {
+                (warpx.g_temp[lev])->data()[i] = double(costs->data()[i]);
+            }
         }
 #endif
 
@@ -699,7 +701,9 @@ WarpXParticleContainer::DepositCharge (amrex::Vector<std::unique_ptr<amrex::Mult
         if (costs && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::GpuClock)
         {
             warpx.GraphClearTemps();
-            *(warpx.g_temp[lev]) = *costs;
+            for (int i=0; i<costs->local_size(); ++i) {
+                (warpx.g_temp[lev])->data()[i] = double(costs->data()[i]);
+            }
         }
 #endif
 
@@ -1035,7 +1039,7 @@ WarpXParticleContainer::PushX (int lev, amrex::Real dt)
                 amrex::Gpu::synchronize();
                 wt = amrex::second() - wt;
                 amrex::HostDevice::Atomic::Add( &(*costs)[pti.index()], wt);
-                amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[pti.index()], wt);
+                amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[pti.index()], double(wt));
             }
         }
     }

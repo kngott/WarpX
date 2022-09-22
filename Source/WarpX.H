@@ -1306,7 +1306,7 @@ public:
     // Graph stuff.
     amrex::Graph graph;
     // Saved data pieces.
-    amrex::Vector<std::unique_ptr<amrex::LayoutData<amrex::Real> > > g_temp;
+    amrex::Vector<std::unique_ptr<amrex::LayoutData<double> > > g_temp;
     amrex::Vector<amrex::Vector<int> > g_new_dmap;
     amrex::Vector<bool> g_do_load_balance;
     std::string g_fabname = "Ex";

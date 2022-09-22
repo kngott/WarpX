@@ -189,7 +189,7 @@ WarpX::Hybrid_QED_Push (int lev, PatchType patch_type, amrex::Real a_dt)
             amrex::Gpu::synchronize();
             wt = static_cast<Real>(amrex::second()) - wt;
             amrex::HostDevice::Atomic::Add( &(*cost)[mfi.index()], wt);
-            amrex::HostDevice::Atomic::Add( &(*g_temp[lev])[mfi.index()], wt);
+            amrex::HostDevice::Atomic::Add( &(*g_temp[lev])[mfi.index()], double(wt));
         }
     }
 

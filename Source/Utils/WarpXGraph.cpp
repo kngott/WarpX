@@ -27,7 +27,7 @@ WarpX::GraphSetup ()
     for (int lev = 0; lev < finest_level; ++lev) {
         amrex::MultiFab* Ex = Efield_fp[lev][0].get();
 
-        g_temp[lev] = std::make_unique<amrex::LayoutData<amrex::Real>>(boxArray(lev), Ex->DistributionMap());
+        g_temp[lev] = std::make_unique<amrex::LayoutData<double>>(boxArray(lev), Ex->DistributionMap());
     }
 }
 
@@ -41,7 +41,7 @@ WarpX::GraphSetup (const int lev, const amrex::BoxArray& ba, const amrex::Distri
         g_temp.resize(lev+1);
     }
 
-    g_temp[lev] = std::make_unique<amrex::LayoutData<amrex::Real>>(ba, dm);
+    g_temp[lev] = std::make_unique<amrex::LayoutData<double>>(ba, dm);
 }
 
 
@@ -141,9 +141,14 @@ WarpX::GraphAddLoadBalance (const int lev, const bool do_load_balance, const amr
     std::string fab_name = GraphFabName(lev);
     std::string wgt_name = "costs";
 
+    amrex::LayoutData<double> temp((g_temp[lev])->boxArray(), (g_temp[lev])->DistributionMap());
+
+    for (int i=0; i<temp.local_size(); ++i) {
+        temp.data()[i] = double(g_temp[lev]->data()[i]);
+    }
+
     // Add costs, with scale equaling currentEfficiency
-    graph.addLayoutData(*costs[lev], fab_name, sizeof(amrex::Real),
-                        wgt_name, double(currentEfficiency));
+    graph.addLayoutData(temp, fab_name, sizeof(amrex::Real), wgt_name, double(currentEfficiency));
 
     // Add generated mapping, with scale equaling proposedEfficiency
     // Use the name to show whether load balance occurred.
