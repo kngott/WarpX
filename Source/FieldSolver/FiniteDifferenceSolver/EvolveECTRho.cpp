@@ -154,7 +154,7 @@ void FiniteDifferenceSolver::EvolveRhoCartesianECT (
             amrex::Gpu::synchronize();
             wt = amrex::second() - wt;
             amrex::HostDevice::Atomic::Add( &(*cost)[mfi.index()], wt);
-            amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[mfi.index()], wt);
+            amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[mfi.index()], double(wt));
         }
 #ifdef WARPX_DIM_XZ
         amrex::ignore_unused(Ey, Rhox, Rhoz, ly);
