@@ -22,9 +22,9 @@ WarpX::GraphSetup ()
     BL_PROFILE("GraphSetup()");
     graph.clear();
 
-    const int finest_level = Efield_fp.size();
-    g_temp.resize(finest_level);
-    for (int lev = 0; lev < finest_level; ++lev) {
+    const int nlevels = Efield_fp.size();
+    g_temp.resize(nlevels);
+    for (int lev = 0; lev < nlevels; ++lev) {
         amrex::MultiFab* Ex = Efield_fp[lev][0].get();
 
         g_temp[lev] = std::make_unique<amrex::LayoutData<double>>(boxArray(lev), Ex->DistributionMap());
@@ -49,9 +49,9 @@ void
 WarpX::GraphClearTemps ()
 {
     BL_PROFILE("GraphClearTemps()");
-    const int finest_level = g_temp.size();
+    const int nlevels = g_temp.size();
 
-    for (int lev = 0; lev < finest_level; ++lev)
+    for (int lev = 0; lev < nlevels; ++lev)
     {
         const auto iarr = g_temp[lev]->IndexArray();
 
@@ -73,8 +73,8 @@ WarpX::GraphAddTemps (int lev, const std::string& fab_name, const std::string& w
 void
 WarpX::GraphAddTemps (const std::string& fab_name, const std::string& wgt_name, const std::vector<double>& scaling)
 {
-    const int finest_level = g_temp.size();
-    for (int lev = 0; lev < finest_level; ++lev)
+    const int nlevels = g_temp.size();
+    for (int lev = 0; lev < nlevels; ++lev)
     {
         GraphAddTemps(lev, fab_name + std::to_string(lev), wgt_name, scaling[lev]);
     }
@@ -83,8 +83,8 @@ WarpX::GraphAddTemps (const std::string& fab_name, const std::string& wgt_name, 
 void
 WarpX::GraphAddTemps (const std::string& fab_name, const std::string& wgt_name, const double scaling)
 {
-    const int finest_level = g_temp.size();
-    for (int lev = 0; lev < finest_level; ++lev)
+    const int nlevels = g_temp.size();
+    for (int lev = 0; lev < nlevels; ++lev)
     {
         GraphAddTemps(lev, fab_name, wgt_name, scaling);
     }
@@ -95,9 +95,9 @@ void
 WarpX::GraphAddCellsandParticles ()
 {
     BL_PROFILE("GraphAddCellsandParticles()");
-    const int finest_level = g_temp.size();
+    const int nlevels = g_temp.size();
 
-    for (int lev = 0; lev < finest_level; ++lev) {
+    for (int lev = 0; lev < nlevels; ++lev) {
         amrex::MultiFab* Ex = Efield_fp[lev][0].get();
         std::string fab_name = GraphFabName(lev);
 
@@ -164,7 +164,9 @@ WarpX::GraphAddFillBoundaryE(const amrex::IntVect& ng, const bool nodal_sync, co
     // Generalize with an enum to select the MF to use?
     // i.e. WarpXData::E, WarpXData::B ...
 
-    for (int lev=0; lev <= finest_level; ++lev)
+    const int nlevels = WarpX::finest_level;
+
+    for (int lev=0; lev <= nlevels; ++lev)
     {
         std::size_t buffer_size = (do_single_precision_comms) ?
                              sizeof(ablastr::utils::communication::comm_float_type) : 0;
