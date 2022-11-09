@@ -35,7 +35,7 @@
 #include "FieldSolver/ElectrostaticSolver.H"
 #include "Filter/BilinearFilter.H"
 #include "Parallelization/GuardCellManager.H"
-#include "Utils/IntervalsParser.H"
+#include "Utils/Parser/IntervalsParser.H"
 #include "Utils/WarpXAlgorithmSelection.H"
 
 #include <AMReX.H>
@@ -102,8 +102,9 @@ public:
     ParticleBoundaryBuffer& GetParticleBoundaryBuffer () { return *m_particle_boundary_buffer; }
 
     static void shiftMF (amrex::MultiFab& mf, const amrex::Geometry& geom,
-                         int num_shift, int dir, const int lev, amrex::Real external_field=0.0,
-                         bool useparser = false, amrex::ParserExecutor<3> const& field_parser={});
+                         int num_shift, int dir, const int lev, bool update_cost_flag,
+                         amrex::Real external_field=0.0, bool useparser = false,
+                         amrex::ParserExecutor<3> const& field_parser={});
 
     static void GotoNextLine (std::istream& is);
 
@@ -156,7 +157,7 @@ public:
     //! Integer that corresponds to the particle push algorithm (Boris, Vay, Higuera-Cary)
     static short particle_pusher_algo;
     //! Integer that corresponds to the type of Maxwell solver (Yee, CKC, PSATD, ECT)
-    static short maxwell_solver_id;
+    static short electromagnetic_solver_id;
     /** Records a number corresponding to the load balance cost update strategy
      *  being used (0, 1, 2 corresponding to timers, heuristic, or gpuclock).
      */
@@ -308,7 +309,7 @@ public:
     static bool do_dynamic_scheduling;
     static bool refine_plasma;
 
-    static IntervalsParser sort_intervals;
+    static utils::parser::IntervalsParser sort_intervals;
     static amrex::IntVect sort_bin_size;
 
     static bool do_subcycling;
@@ -455,7 +456,7 @@ public:
     void PrintMainPICparameters ();
 
     /** Write a file that record all inputs: inputs file + command line options */
-    void WriteUsedInputsFile (std::string const & filename = "warpx_used_inputs") const;
+    void WriteUsedInputsFile () const;
 
     /** Print dt and dx,dy,dz */
     void PrintDtDxDyDz ();
@@ -532,7 +533,10 @@ public:
 
     /** \brief returns the load balance interval
      */
-    IntervalsParser get_load_balance_intervals () const {return load_balance_intervals;}
+    utils::parser::IntervalsParser get_load_balance_intervals () const
+    {
+        return load_balance_intervals;
+    }
 
     /**
      * \brief Private function for spectral solver
@@ -635,21 +639,21 @@ public:
     void UpdateCurrentNodalToStag (amrex::MultiFab& dst, amrex::MultiFab const& src);
 
     // Fill boundary cells including coarse/fine boundaries
-    void FillBoundaryB   (amrex::IntVect ng, const bool nodal_sync = false);
-    void FillBoundaryE   (amrex::IntVect ng, const bool nodal_sync = false);
+    void FillBoundaryB   (amrex::IntVect ng, std::optional<bool> nodal_sync = std::nullopt);
+    void FillBoundaryE   (amrex::IntVect ng, std::optional<bool> nodal_sync = std::nullopt);
     void FillBoundaryB_avg   (amrex::IntVect ng);
     void FillBoundaryE_avg   (amrex::IntVect ng);
 
-    void FillBoundaryF   (amrex::IntVect ng, const bool nodal_sync = false);
-    void FillBoundaryG   (amrex::IntVect ng, const bool nodal_sync = false);
+    void FillBoundaryF   (amrex::IntVect ng, std::optional<bool> nodal_sync = std::nullopt);
+    void FillBoundaryG   (amrex::IntVect ng, std::optional<bool> nodal_sync = std::nullopt);
     void FillBoundaryAux (amrex::IntVect ng);
-    void FillBoundaryE   (int lev, amrex::IntVect ng, const bool nodal_sync = false);
-    void FillBoundaryB   (int lev, amrex::IntVect ng, const bool nodal_sync = false);
+    void FillBoundaryE   (int lev, amrex::IntVect ng, std::optional<bool> nodal_sync = std::nullopt);
+    void FillBoundaryB   (int lev, amrex::IntVect ng, std::optional<bool> nodal_sync = std::nullopt);
     void FillBoundaryE_avg   (int lev, amrex::IntVect ng);
     void FillBoundaryB_avg   (int lev, amrex::IntVect ng);
 
-    void FillBoundaryF   (int lev, amrex::IntVect ng, const bool nodal_sync = false);
-    void FillBoundaryG   (int lev, amrex::IntVect ng, const bool nodal_sync = false);
+    void FillBoundaryF   (int lev, amrex::IntVect ng, std::optional<bool> nodal_sync = std::nullopt);
+    void FillBoundaryG   (int lev, amrex::IntVect ng, std::optional<bool> nodal_sync = std::nullopt);
     void FillBoundaryAux (int lev, amrex::IntVect ng);
 
     /**
@@ -731,7 +735,7 @@ public:
     static const amrex::iMultiFab* CurrentBufferMasks (int lev);
     static const amrex::iMultiFab* GatherBufferMasks (int lev);
 
-    static int do_electrostatic;
+    static int electrostatic_solver_id;
 
     // Parameters for lab frame electrostatic
     static amrex::Real self_fields_required_precision;
@@ -810,6 +814,8 @@ public:
     void computeB (amrex::Vector<std::array<std::unique_ptr<amrex::MultiFab>, 3> >& B,
                    const amrex::Vector<std::unique_ptr<amrex::MultiFab> >& phi,
                    std::array<amrex::Real, 3> const beta = {{0,0,0}} ) const;
+    void computePhiTriDiagonal (const amrex::Vector<std::unique_ptr<amrex::MultiFab> >& rho,
+                                      amrex::Vector<std::unique_ptr<amrex::MultiFab> >& phi) const;
 
     /**
      * \brief
@@ -954,10 +960,10 @@ private:
     ///
     void EvolveEM(int numsteps);
 
-    void FillBoundaryB (const int lev, const PatchType patch_type, const amrex::IntVect ng, const bool nodal_sync = false);
-    void FillBoundaryE (const int lev, const PatchType patch_type, const amrex::IntVect ng, const bool nodal_sync = false);
-    void FillBoundaryF (int lev, PatchType patch_type, amrex::IntVect ng, const bool nodal_sync = false);
-    void FillBoundaryG (int lev, PatchType patch_type, amrex::IntVect ng, const bool nodal_sync = false);
+    void FillBoundaryB (const int lev, const PatchType patch_type, const amrex::IntVect ng, std::optional<bool> nodal_sync = std::nullopt);
+    void FillBoundaryE (const int lev, const PatchType patch_type, const amrex::IntVect ng, std::optional<bool> nodal_sync = std::nullopt);
+    void FillBoundaryF (int lev, PatchType patch_type, amrex::IntVect ng, std::optional<bool> nodal_sync = std::nullopt);
+    void FillBoundaryG (int lev, PatchType patch_type, amrex::IntVect ng, std::optional<bool> nodal_sync = std::nullopt);
 
     void FillBoundaryB_avg (int lev, PatchType patch_type, amrex::IntVect ng);
     void FillBoundaryE_avg (int lev, PatchType patch_type, amrex::IntVect ng);
@@ -1064,6 +1070,11 @@ private:
      * for a given MultiFab, and abort otherwise.
      */
     void CheckGuardCells(amrex::MultiFab const& mf);
+
+    /**
+     * \brief Checks for known numerical issues involving different WarpX modules
+     */
+    void CheckKnownIssues();
 
     /** Check the requested resources and write performance hints */
     void PerformanceHints ();
@@ -1270,7 +1281,7 @@ private:
     // Load balancing
     /** Load balancing intervals that reads the "load_balance_intervals" string int the input file
      * for getting steps at which load balancing is performed */
-    IntervalsParser load_balance_intervals;
+    utils::parser::IntervalsParser load_balance_intervals;
     /** Collection of LayoutData to keep track of weights used in load balancing
      * routines. Contains timer-based or heuristic-based costs depending on input option */
     amrex::Vector<std::unique_ptr<amrex::LayoutData<amrex::Real> > > costs;
@@ -1328,7 +1339,7 @@ public:
 
 private:
     // Determines timesteps for override sync
-    IntervalsParser override_sync_intervals;
+    utils::parser::IntervalsParser override_sync_intervals;
 
     // Other runtime parameters
     int verbose = 1;
