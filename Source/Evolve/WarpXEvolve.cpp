@@ -11,7 +11,6 @@
 #include "WarpX.H"
 
 #include "BoundaryConditions/PML.H"
-#include "Diagnostics/BackTransformedDiagnostic.H"
 #include "Diagnostics/MultiDiagnostics.H"
 #include "Diagnostics/ReducedDiags/MultiReducedDiags.H"
 #include "Evolve/WarpXDtType.H"
@@ -71,7 +70,7 @@ WarpX::Evolve (int numsteps)
     if (numsteps < 0) {  // Note that the default argument is numsteps = -1
         numsteps_max = max_step;
     } else {
-        numsteps_max = std::min(istep[0]+numsteps, max_step);
+        numsteps_max = istep[0] + numsteps;
     }
 
     bool early_params_checked = false; // check typos in inputs after step 1
@@ -261,15 +260,6 @@ WarpX::Evolve (int numsteps)
 
         ShiftGalileanBoundary();
 
-        if (do_back_transformed_diagnostics) {
-            std::unique_ptr<MultiFab> cell_centered_data = nullptr;
-            if (WarpX::do_back_transformed_fields) {
-                cell_centered_data = GetCellCenteredData();
-            }
-            myBFD->writeLabFrameData(cell_centered_data.get(), *mypc, geom[0], cur_time, dt[0]);
-        }
-
-
         // sync up time
         for (int i = 0; i <= max_level; ++i) {
             t_new[i] = cur_time;
@@ -383,12 +373,14 @@ WarpX::Evolve (int numsteps)
 
         // End loop on time steps
     }
+
     GraphPrintandClear("Step_"+std::to_string(step+1), 8);
 
-    multi_diags->FilterComputePackFlushLastTimestep( istep[0] );
-
-    if (do_back_transformed_diagnostics) {
-        myBFD->Flush(geom[0]);
+    // This if statement is needed for PICMI, which allows the Evolve routine to be
+    // called multiple times, otherwise diagnostics will be done at every call,
+    // regardless of the diagnostic period parameter provided in the inputs.
+    if (istep[0] == max_step || (stop_time - 1.e-3*dt[0] <= cur_time && cur_time < stop_time + dt[0])) {
+        multi_diags->FilterComputePackFlushLastTimestep( istep[0] );
     }
 }
 
@@ -534,6 +526,13 @@ void WarpX::SyncCurrentAndRho ()
             {
                 SyncCurrent(current_fp, current_cp);
                 SyncRho();
+            }
+
+            if (current_deposition_algo == CurrentDepositionAlgo::Vay)
+            {
+                // TODO This works only without mesh refinement
+                const int lev = 0;
+                if (use_filter) ApplyFilterJ(current_fp_vay, lev);
             }
         }
     }
@@ -946,6 +945,7 @@ WarpX::PushParticlesandDepose (int lev, amrex::Real cur_time, DtType a_dt_type, 
     }
     else if (WarpX::current_deposition_algo == CurrentDepositionAlgo::Vay)
     {
+        // Note that Vay deposition is supported only for PSATD and the code currently aborts otherwise
         current_x = current_fp_vay[lev][0].get();
         current_y = current_fp_vay[lev][1].get();
         current_z = current_fp_vay[lev][2].get();
