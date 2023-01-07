@@ -111,7 +111,7 @@ WarpX::Hybrid_QED_Push (int lev, PatchType patch_type, amrex::Real a_dt)
 #endif
     for ( MFIter mfi(*Bx, TilingIfNotGPU()); mfi.isValid(); ++mfi )
     {
-        if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
+//        if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
         {
             amrex::Gpu::synchronize();
         }
@@ -184,18 +184,16 @@ WarpX::Hybrid_QED_Push (int lev, PatchType patch_type, amrex::Real a_dt)
             }
         );
 
+        amrex::Gpu::synchronize();
+        wt = static_cast<Real>(amrex::second()) - wt;
+        amrex::HostDevice::Atomic::Add( &(*g_temp[lev])[mfi.index()], double(wt));
+
         if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
         {
-            amrex::Gpu::synchronize();
-            wt = static_cast<Real>(amrex::second()) - wt;
             amrex::HostDevice::Atomic::Add( &(*cost)[mfi.index()], wt);
-            amrex::HostDevice::Atomic::Add( &(*g_temp[lev])[mfi.index()], double(wt));
         }
     }
 
-    if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
-    {
-        scaling = amrex::second() - scaling;
-        GraphAddTemps(lev, GraphFabName(lev), "QED_Push", scaling);
-    }
+    scaling = amrex::second() - scaling;
+    GraphAddTemps(lev, GraphFabName(lev), "QED_Push", scaling);
 }

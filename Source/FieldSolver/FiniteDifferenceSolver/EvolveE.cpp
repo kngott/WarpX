@@ -116,7 +116,7 @@ void FiniteDifferenceSolver::EvolveECartesian (
 #pragma omp parallel if (amrex::Gpu::notInLaunchRegion())
 #endif
     for ( MFIter mfi(*Efield[0], TilingIfNotGPU()); mfi.isValid(); ++mfi ) {
-        if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
+//        if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
         {
             amrex::Gpu::synchronize();
         }
@@ -221,20 +221,18 @@ void FiniteDifferenceSolver::EvolveECartesian (
 
         }
 
+        amrex::Gpu::synchronize();
+        wt = amrex::second() - wt;
+        amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[mfi.index()], double(wt));
+
         if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
         {
-            amrex::Gpu::synchronize();
-            wt = amrex::second() - wt;
             amrex::HostDevice::Atomic::Add( &(*cost)[mfi.index()], wt);
-            amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[mfi.index()], double(wt));
         }
     }
 
-    if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
-    {
-        scaling = amrex::second() - scaling;
-        warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "EvolveECyl", scaling);
-    }
+    scaling = amrex::second() - scaling;
+    warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "EvolveECyl", scaling);
 }
 
 #else // corresponds to ifndef WARPX_DIM_RZ
@@ -257,7 +255,7 @@ void FiniteDifferenceSolver::EvolveECylindrical (
 #pragma omp parallel if (amrex::Gpu::notInLaunchRegion())
 #endif
     for ( MFIter mfi(*Efield[0], TilingIfNotGPU()); mfi.isValid(); ++mfi ) {
-        if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
+//        if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
         {
             amrex::Gpu::synchronize();
         }
@@ -432,20 +430,18 @@ void FiniteDifferenceSolver::EvolveECylindrical (
 
         } // end of if condition for F
 
+        amrex::Gpu::synchronize();
+        wt = amrex::second() - wt;
+        amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[mfi.index()], double(wt));
+
         if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
         {
-            amrex::Gpu::synchronize();
-            wt = amrex::second() - wt;
             amrex::HostDevice::Atomic::Add( &(*cost)[mfi.index()], wt);
-            amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[mfi.index()], double(wt));
         }
     } // end of loop over grid/tiles
 
-    if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
-    {
-        scaling = amrex::second() - scaling;
-        warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "EvolveECyl", scaling);
-    }
+    scaling = amrex::second() - scaling;
+    warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "EvolveECyl", scaling);
 }
 
 #endif // corresponds to ifndef WARPX_DIM_RZ

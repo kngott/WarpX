@@ -117,7 +117,7 @@ void FiniteDifferenceSolver::EvolveBCartesian (
 #pragma omp parallel if (amrex::Gpu::notInLaunchRegion())
 #endif
     for ( MFIter mfi(*Bfield[0], TilingIfNotGPU()); mfi.isValid(); ++mfi ) {
-        if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
+//        if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
         {
             amrex::Gpu::synchronize();
         }
@@ -193,20 +193,18 @@ void FiniteDifferenceSolver::EvolveBCartesian (
             );
         }
 
+        amrex::Gpu::synchronize();
+        wt = amrex::second() - wt;
+        amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[mfi.index()], double(wt));
+
         if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
         {
-            amrex::Gpu::synchronize();
-            wt = amrex::second() - wt;
             amrex::HostDevice::Atomic::Add( &(*cost)[mfi.index()], wt);
-            amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[mfi.index()], double(wt));
         }
     }
 
-    if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
-    {
-        scaling = amrex::second() - scaling;
-        warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "EvolveBCart", scaling);
-    }
+    scaling = amrex::second() - scaling;
+    warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "EvolveBCart", scaling);
 }
 
 
@@ -241,7 +239,8 @@ void FiniteDifferenceSolver::EvolveBCartesianECT (
 #endif
     for (MFIter mfi(*Bfield[0]); mfi.isValid(); ++mfi) {
 
-        if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers) {
+//        if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
+        {
             amrex::Gpu::synchronize();
         }
         Real wt = amrex::second();
@@ -364,20 +363,19 @@ void FiniteDifferenceSolver::EvolveBCartesianECT (
             });
 
         }
+
+        amrex::Gpu::synchronize();
+        wt = amrex::second() - wt;
+        amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[mfi.index()], double(wt));
+
         if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
         {
-            amrex::Gpu::synchronize();
-            wt = amrex::second() - wt;
             amrex::HostDevice::Atomic::Add( &(*cost)[mfi.index()], wt);
-            amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[mfi.index()], double(wt));
         }
     }
 
-    if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
-    {
-        scaling = amrex::second() - scaling;
-        warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "EvolveBCartECT", scaling);
-    }
+    scaling = amrex::second() - scaling;
+    warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "EvolveBCartECT", scaling);
 #else
     amrex::ignore_unused(Bfield, face_areas, area_mod, ECTRhofield, Venl, flag_info_cell, borrowing,
                          lev, dt);
@@ -402,7 +400,7 @@ void FiniteDifferenceSolver::EvolveBCylindrical (
 #pragma omp parallel if (amrex::Gpu::notInLaunchRegion())
 #endif
     for ( MFIter mfi(*Bfield[0], TilingIfNotGPU()); mfi.isValid(); ++mfi ) {
-        if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
+//        if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
         {
             amrex::Gpu::synchronize();
         }
@@ -495,19 +493,18 @@ void FiniteDifferenceSolver::EvolveBCylindrical (
 
         );
 
+        amrex::Gpu::synchronize();
+        wt = amrex::second() - wt;
+        amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[mfi.index()], double(wt));
+
         if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
         {
-            amrex::Gpu::synchronize();
-            wt = amrex::second() - wt;
             amrex::HostDevice::Atomic::Add( &(*cost)[mfi.index()], wt);
-            amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[mfi.index()], double(wt));
         }
     }
-    if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
-    {
-        scaling = amrex::second() - scaling;
-        warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "EvolveBCyl", scaling);
-    }
+
+    scaling = amrex::second() - scaling;
+    warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "EvolveBCyl", scaling);
 }
 
 #endif // corresponds to ifndef WARPX_DIM_RZ

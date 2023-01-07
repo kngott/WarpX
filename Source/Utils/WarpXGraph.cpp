@@ -22,6 +22,7 @@ WarpX::GraphSetup ()
     BL_PROFILE("GraphSetup()");
     graph.clear();
 
+    graph.setRepeatEntry(amrex::Graph::RepeatEntry::New);
     const int nlevels = Efield_fp.size();
     g_temp.resize(nlevels);
     for (int lev = 0; lev < nlevels; ++lev) {

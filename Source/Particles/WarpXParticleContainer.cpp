@@ -436,8 +436,9 @@ WarpXParticleContainer::DepositCurrent (WarpXParIter& pti,
     }
 
     WARPX_PROFILE_VAR_START(blp_deposit);
-    amrex::LayoutData<amrex::Real> * const costs = WarpX::getCosts(lev);
-    amrex::Real * const cost = costs ? &((*costs)[pti.index()]) : nullptr;
+//    amrex::LayoutData<amrex::Real> * const costs = WarpX::getCosts(lev);
+    amrex::Real * const cost = &(*(warpx.g_temp)[lev])[pti.index()];
+//    amrex::Real * const cost = costs ? &((*costs)[pti.index()]) : nullptr;
 
     if (WarpX::current_deposition_algo == CurrentDepositionAlgo::Esirkepov) {
         if        (WarpX::nox == 1){
@@ -543,13 +544,7 @@ WarpXParticleContainer::DepositCurrent (
         WarpX& warpx = WarpX::GetInstance();
         double scaling = amrex::second();
         amrex::LayoutData<amrex::Real>* costs = WarpX::getCosts(lev);
-        if (costs && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::GpuClock)
-        {
-            warpx.GraphClearTemps();
-            for (int i=0; i<costs->local_size(); ++i) {
-                (warpx.g_temp[lev])->data()[i] = double(costs->data()[i]);
-            }
-        }
+        warpx.GraphClearTemps();
 #endif
 
         for (WarpXParIter pti(*this, lev); pti.isValid(); ++pti)
@@ -575,16 +570,16 @@ WarpXParticleContainer::DepositCurrent (
 #endif
 
 #ifdef WARPX_USE_GPUCLOCK
+        scaling = amrex::second() - scaling;
+        warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "DepositCurrent", scaling);
+
         if (costs && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::GpuClock)
         {
-            scaling = amrex::second() - scaling;
             for (int i=0; i<costs->local_size(); ++i) {
-                (warpx.g_temp[lev])->data()[i] = costs->data()[i] - (warpx.g_temp[lev])->data()[i];
+                costs->data()[i] += (warpx.g_temp[lev])->data()[i];
             }
-            warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "DepositCurrent", scaling);
         }
 #endif
-
 
     }
 }
@@ -648,8 +643,9 @@ WarpXParticleContainer::DepositCharge (WarpXParIter& pti, RealVector const& wp,
     const std::array<amrex::Real,3>& xyzmin = WarpX::LowerCorner(tilebox, depos_lev, time_shift_delta);
 
     // pointer to costs data
-    amrex::LayoutData<amrex::Real>* costs = WarpX::getCosts(lev);
-    amrex::Real* cost = costs ? &((*costs)[pti.index()]) : nullptr;
+//    amrex::LayoutData<amrex::Real>* costs = WarpX::getCosts(lev);
+    amrex::Real* cost = &(*(warpx.g_temp)[lev])[pti.index()];
+//    amrex::Real* cost = costs ? &((*costs)[pti.index()]) : nullptr;
 
     AMREX_ALWAYS_ASSERT(WarpX::nox == WarpX::noy);
     AMREX_ALWAYS_ASSERT(WarpX::nox == WarpX::noz);
@@ -698,13 +694,7 @@ WarpXParticleContainer::DepositCharge (amrex::Vector<std::unique_ptr<amrex::Mult
         WarpX& warpx = WarpX::GetInstance();
         double scaling = amrex::second();
         amrex::LayoutData<amrex::Real>* costs = WarpX::getCosts(lev);
-        if (costs && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::GpuClock)
-        {
-            warpx.GraphClearTemps();
-            for (int i=0; i<costs->local_size(); ++i) {
-                (warpx.g_temp[lev])->data()[i] = double(costs->data()[i]);
-            }
-        }
+        warpx.GraphClearTemps();
 #endif
 
         for (WarpXParIter pti(*this, lev); pti.isValid(); ++pti)
@@ -725,13 +715,14 @@ WarpXParticleContainer::DepositCharge (amrex::Vector<std::unique_ptr<amrex::Mult
 #endif
 
 #ifdef WARPX_USE_GPUCLOCK
+        scaling = amrex::second() - scaling;
+        warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "DepositCharge", scaling);
+
         if (costs && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::GpuClock)
         {
-            scaling = amrex::second() - scaling;
             for (int i=0; i<costs->local_size(); ++i) {
-                (warpx.g_temp[lev])->data()[i] = costs->data()[i] - (warpx.g_temp[lev])->data()[i];
+                costs->data()[i] += (warpx.g_temp[lev])->data()[i];
             }
-            warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "DepositCharge", scaling);
         }
 #endif
 
@@ -1005,7 +996,7 @@ WarpXParticleContainer::PushX (int lev, amrex::Real dt)
 
         for (WarpXParIter pti(*this, lev); pti.isValid(); ++pti)
         {
-            if (costs && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
+//            if (costs && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
             {
                 amrex::Gpu::synchronize();
             }
@@ -1034,20 +1025,19 @@ WarpXParticleContainer::PushX (int lev, amrex::Real dt)
                 }
             );
 
+            amrex::Gpu::synchronize();
+            wt = amrex::second() - wt;
+            amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[pti.index()], double(wt));
+
             if (costs && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
             {
-                amrex::Gpu::synchronize();
-                wt = amrex::second() - wt;
                 amrex::HostDevice::Atomic::Add( &(*costs)[pti.index()], wt);
-                amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[pti.index()], double(wt));
             }
         }
     }
-    if (costs && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
-    {
-        scaling = amrex::second() - scaling;
-        warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "PushX", scaling);
-    }
+
+    scaling = amrex::second() - scaling;
+    warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "PushX", scaling);
 }
 
 // When using runtime components, AMReX requires to touch all tiles

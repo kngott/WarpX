@@ -88,7 +88,8 @@ void FiniteDifferenceSolver::EvolveRhoCartesianECT (
 #pragma omp parallel if (amrex::Gpu::notInLaunchRegion())
 #endif
     for (amrex::MFIter mfi(*ECTRhofield[0], amrex::TilingIfNotGPU()); mfi.isValid(); ++mfi ) {
-        if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers) {
+//        if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
+        {
             amrex::Gpu::synchronize();
         }
         amrex::Real wt = amrex::second();
@@ -149,22 +150,22 @@ void FiniteDifferenceSolver::EvolveRhoCartesianECT (
             }
         );
 
+        amrex::Gpu::synchronize();
+        wt = amrex::second() - wt;
+        amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[mfi.index()], double(wt));
+
+
         if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
         {
-            amrex::Gpu::synchronize();
-            wt = amrex::second() - wt;
             amrex::HostDevice::Atomic::Add( &(*cost)[mfi.index()], wt);
-            amrex::HostDevice::Atomic::Add( &(*(warpx.g_temp)[lev])[mfi.index()], double(wt));
         }
 #ifdef WARPX_DIM_XZ
         amrex::ignore_unused(Ey, Rhox, Rhoz, ly);
 #endif
     }
-    if (cost && WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Timers)
-    {
-        scaling = amrex::second()- scaling;
-        warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "EvolveRhoCartECT", scaling);
-    }
+
+    scaling = amrex::second()- scaling;
+    warpx.GraphAddTemps(lev, warpx.GraphFabName(lev), "EvolveRhoCartECT", scaling);
 
 #else
     amrex::ignore_unused(Efield, edge_lengths, face_areas, ECTRhofield, lev);

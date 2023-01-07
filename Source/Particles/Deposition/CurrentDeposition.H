@@ -117,7 +117,8 @@ void doDepositionShapeN(const GetParticlePosition& GetPosition,
     // Loop over particles and deposit into jx_fab, jy_fab and jz_fab
 #if defined(WARPX_USE_GPUCLOCK)
     amrex::Real* cost_real = nullptr;
-    if( load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::GpuClock) {
+//    if( load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::GpuClock)
+    {
         cost_real = (amrex::Real *) amrex::The_Managed_Arena()->alloc(sizeof(amrex::Real));
         *cost_real = 0._rt;
     }
@@ -327,9 +328,10 @@ void doDepositionShapeN(const GetParticlePosition& GetPosition,
         }
     );
 #if defined(WARPX_USE_GPUCLOCK)
-    if(load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::GpuClock) {
+//    if(load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::GpuClock)
+    {
         amrex::Gpu::streamSynchronize();
-        *cost += *cost_real;
+        *cost = *cost_real;
         amrex::The_Managed_Arena()->free(cost_real);
     }
 #endif
@@ -433,7 +435,8 @@ void doEsirkepovDepositionShapeN (const GetParticlePosition& GetPosition,
     // Loop over particles and deposit into Jx_arr, Jy_arr and Jz_arr
 #if defined(WARPX_USE_GPUCLOCK)
     amrex::Real* cost_real = nullptr;
-    if( load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::GpuClock) {
+//    if( load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::GpuClock)
+    {
         cost_real = (amrex::Real *) amrex::The_Managed_Arena()->alloc(sizeof(amrex::Real));
         *cost_real = 0._rt;
     }
@@ -703,9 +706,10 @@ void doEsirkepovDepositionShapeN (const GetParticlePosition& GetPosition,
         }
     );
 #if defined(WARPX_USE_GPUCLOCK)
-    if( load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::GpuClock) {
+//    if( load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::GpuClock)
+    {
         amrex::Gpu::streamSynchronize();
-        *cost += *cost_real;
+        *cost = *cost_real;
         amrex::The_Managed_Arena()->free(cost_real);
     }
 #endif
@@ -826,7 +830,8 @@ void doVayDepositionShapeN (const GetParticlePosition& GetPosition,
     // Loop over particles and deposit (Dx,Dy,Dz) into jx_fab, jy_fab and jz_fab
 #if defined(WARPX_USE_GPUCLOCK)
     amrex::Real* cost_real = nullptr;
-    if( load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::GpuClock) {
+//    if( load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::GpuClock)
+    {
         cost_real = (amrex::Real *) amrex::The_Managed_Arena()->alloc(sizeof(amrex::Real));
         *cost_real = 0._rt;
     }
@@ -1075,9 +1080,10 @@ void doVayDepositionShapeN (const GetParticlePosition& GetPosition,
 #endif
     } );
 #if defined(WARPX_USE_GPUCLOCK)
-    if( load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::GpuClock) {
+//    if( load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::GpuClock)
+    {
         amrex::Gpu::streamSynchronize();
-        *cost += *cost_real;
+        *cost = *cost_real;
         amrex::The_Managed_Arena()->free(cost_real);
     }
 #endif

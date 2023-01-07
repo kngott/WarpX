@@ -1007,7 +1007,7 @@ void WarpX::SumBoundaryJ (
     amrex::IntVect n_updated_guards = amrex::IntVect::TheZeroVector();
     std::size_t buff_size = 0;
     if (idim == 0) {
-        n_updated_guards = (WarpX::maxwell_solver_id == MaxwellSolverAlgo::PSATD) ?
+        n_updated_guards = (WarpX::electromagnetic_solver_id == ElectromagneticSolverAlgo::PSATD) ?
                             J.nGrowVect() : amrex::IntVect::TheZeroVector();
         buff_size = (do_single_precision_comms) ?
                      sizeof(ablastr::utils::communication::comm_float_type) : 0;
