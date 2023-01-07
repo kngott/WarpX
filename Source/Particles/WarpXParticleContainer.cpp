@@ -437,7 +437,7 @@ WarpXParticleContainer::DepositCurrent (WarpXParIter& pti,
 
     WARPX_PROFILE_VAR_START(blp_deposit);
 //    amrex::LayoutData<amrex::Real> * const costs = WarpX::getCosts(lev);
-    amrex::Real * const cost = &(*(warpx.g_temp)[lev])[pti.index()];
+    double * const cost = &(*(warpx.g_temp)[lev])[pti.index()];
 //    amrex::Real * const cost = costs ? &((*costs)[pti.index()]) : nullptr;
 
     if (WarpX::current_deposition_algo == CurrentDepositionAlgo::Esirkepov) {
@@ -645,7 +645,7 @@ WarpXParticleContainer::DepositCharge (WarpXParIter& pti, RealVector const& wp,
 
     // pointer to costs data
 //    amrex::LayoutData<amrex::Real>* costs = WarpX::getCosts(lev);
-    amrex::Real* cost = &(*(warpx.g_temp)[lev])[pti.index()];
+    double* cost = &(*(warpx.g_temp)[lev])[pti.index()];
 //    amrex::Real* cost = costs ? &((*costs)[pti.index()]) : nullptr;
 
     AMREX_ALWAYS_ASSERT(WarpX::nox == WarpX::noy);
