@@ -73,6 +73,10 @@ class Species(picmistandard.PICMI_Species):
         Whether or not to deposit the charge and current density for
         for this species
 
+    warpx_random_theta: bool, default=True
+        Whether or not to add random angle to the particles in theta
+        when in RZ mode.
+
     warpx_reflection_model_xlo: string, default='0.'
         Expression (in terms of the velocity "v") specifying the probability
         that the particle will reflect on the lower x boundary
@@ -170,6 +174,7 @@ class Species(picmistandard.PICMI_Species):
         self.self_fields_verbosity = kw.pop('warpx_self_fields_verbosity', None)
         self.save_previous_position = kw.pop('warpx_save_previous_position', None)
         self.do_not_deposit = kw.pop('warpx_do_not_deposit', None)
+        self.random_theta = kw.pop('warpx_random_theta', None)
 
         # For particle reflection
         self.reflection_model_xlo = kw.pop('warpx_reflection_model_xlo', None)
@@ -221,7 +226,8 @@ class Species(picmistandard.PICMI_Species):
                                              save_particles_at_zhi = self.save_particles_at_zhi,
                                              save_particles_at_eb = self.save_particles_at_eb,
                                              save_previous_position = self.save_previous_position,
-                                             do_not_deposit = self.do_not_deposit)
+                                             do_not_deposit = self.do_not_deposit,
+                                             random_theta = self.random_theta)
 
         # add reflection models
         self.species.add_new_attr("reflection_model_xlo(E)", self.reflection_model_xlo)
@@ -988,6 +994,7 @@ class ElectrostaticSolver(picmistandard.PICMI_ElectrostaticSolver):
         self.relativistic = kw.pop('warpx_relativistic', False)
         self.absolute_tolerance = kw.pop('warpx_absolute_tolerance', None)
         self.self_fields_verbosity = kw.pop('warpx_self_fields_verbosity', None)
+        self.magnetostatic = kw.pop('warpx_magnetostatic', False)
 
     def initialize_inputs(self):
 
@@ -996,7 +1003,10 @@ class ElectrostaticSolver(picmistandard.PICMI_ElectrostaticSolver):
         if self.relativistic:
             pywarpx.warpx.do_electrostatic = 'relativistic'
         else:
-            pywarpx.warpx.do_electrostatic = 'labframe'
+            if self.magnetostatic:
+                pywarpx.warpx.do_electrostatic = 'labframe-electromagnetostatic'
+            else:
+                pywarpx.warpx.do_electrostatic = 'labframe'
             pywarpx.warpx.self_fields_required_precision = self.required_precision
             pywarpx.warpx.self_fields_absolute_tolerance = self.absolute_tolerance
             pywarpx.warpx.self_fields_max_iters = self.maximum_iterations
@@ -1082,6 +1092,35 @@ class LaserAntenna(picmistandard.PICMI_LaserAntenna):
                 (self.position[1] - laser.centroid_position[1])**2 +
                 (self.position[2] - laser.centroid_position[2])**2
             ) / constants.c
+
+
+class AnalyticInitialField(picmistandard.PICMI_AnalyticAppliedField):
+    def init(self, kw):
+        self.mangle_dict = None
+
+    def initialize_inputs(self):
+        # Note that lower and upper_bound are not used by WarpX
+
+        if self.mangle_dict is None:
+            # Only do this once so that the same variables are used in this distribution
+            # is used multiple times
+            self.mangle_dict = pywarpx.my_constants.add_keywords(self.user_defined_kw)
+
+        if (self.Ex_expression is not None or
+            self.Ey_expression is not None or
+            self.Ez_expression is not None):
+            pywarpx.warpx.E_ext_grid_init_style = 'parse_e_ext_grid_function'
+            for sdir, expression in zip(['x', 'y', 'z'], [self.Ex_expression, self.Ey_expression, self.Ez_expression]):
+                expression = pywarpx.my_constants.mangle_expression(expression, self.mangle_dict)
+                pywarpx.warpx.__setattr__(f'E{sdir}_external_grid_function(x,y,z)', expression)
+
+        if (self.Bx_expression is not None or
+            self.By_expression is not None or
+            self.Bz_expression is not None):
+            pywarpx.warpx.B_ext_grid_init_style = 'parse_b_ext_grid_function'
+            for sdir, expression in zip(['x', 'y', 'z'], [self.Bx_expression, self.By_expression, self.Bz_expression]):
+                expression = pywarpx.my_constants.mangle_expression(expression, self.mangle_dict)
+                pywarpx.warpx.__setattr__(f'B{sdir}_external_grid_function(x,y,z)', expression)
 
 
 class ConstantAppliedField(picmistandard.PICMI_ConstantAppliedField):
@@ -1719,7 +1758,11 @@ class FieldDiagnostic(picmistandard.PICMI_FieldDiagnostic, WarpXDiagnosticBase):
                     fields_to_plot.add('jx')
                     fields_to_plot.add('jy')
                     fields_to_plot.add('jz')
-                elif dataname in ['Ex', 'Ey', 'Ez', 'Bx', 'By', 'Bz', 'rho', 'phi', 'F', 'proc_number', 'part_per_cell']:
+                elif dataname == 'A':
+                    fields_to_plot.add('Ax')
+                    fields_to_plot.add('Ay')
+                    fields_to_plot.add('Az')
+                elif dataname in ['Ex', 'Ey', 'Ez', 'Bx', 'By', 'Bz', 'Ax', 'Ay', 'Az', 'rho', 'phi', 'F', 'proc_number', 'part_per_cell']:
                     fields_to_plot.add(dataname)
                 elif dataname in ['Jx', 'Jy', 'Jz']:
                     fields_to_plot.add(dataname.lower())
@@ -2081,8 +2124,8 @@ class ReducedDiagnostic(picmistandard.base._ClassWithInit, WarpXDiagnosticBase):
     def _handle_field_probe(self, **kw):
         """Utility function to grab required inputs for a field probe from kw"""
         self.probe_geometry = kw.pop("probe_geometry")
-        self.x_probe = kw.pop("x_probe")
-        self.y_probe = kw.pop("y_probe")
+        self.x_probe = kw.pop("x_probe", None)
+        self.y_probe = kw.pop("y_probe", None)
         self.z_probe = kw.pop("z_probe")
 
         self.interp_order = kw.pop("interp_order", None)
@@ -2093,20 +2136,20 @@ class ReducedDiagnostic(picmistandard.base._ClassWithInit, WarpXDiagnosticBase):
             self.resolution = kw.pop("resolution")
 
         if self.probe_geometry.lower() == 'line':
-            self.x1_probe = kw.pop("x1_probe")
-            self.y1_probe = kw.pop("y1_probe")
+            self.x1_probe = kw.pop("x1_probe", None)
+            self.y1_probe = kw.pop("y1_probe", None)
             self.z1_probe = kw.pop("z1_probe")
 
         if self.probe_geometry.lower() == 'plane':
             self.detector_radius = kw.pop("detector_radius")
 
-            self.target_normal_x = kw.pop("target_normal_x")
-            self.target_normal_y = kw.pop("target_normal_y")
-            self.target_normal_z = kw.pop("target_normal_z")
+            self.target_normal_x = kw.pop("target_normal_x", None)
+            self.target_normal_y = kw.pop("target_normal_y", None)
+            self.target_normal_z = kw.pop("target_normal_z", None)
 
-            self.target_up_x = kw.pop("target_up_x")
-            self.target_up_y = kw.pop("target_up_y")
-            self.target_up_z = kw.pop("target_up_z")
+            self.target_up_x = kw.pop("target_up_x", None)
+            self.target_up_y = kw.pop("target_up_y", None)
+            self.target_up_z = kw.pop("target_up_z", None)
 
         return kw
 

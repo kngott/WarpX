@@ -111,8 +111,9 @@ public:
      * @param mypc Container of species involved
      *
      */
-    void doCollisions (amrex::Real /*cur_time*/, amrex::Real dt, MultiParticleContainer* mypc) override
+    void doCollisions (amrex::Real cur_time, amrex::Real dt, MultiParticleContainer* mypc) override
     {
+        amrex::ignore_unused(cur_time);
 
         auto& species1 = mypc->GetParticleContainerFromName(m_species_names[0]);
         auto& species2 = mypc->GetParticleContainerFromName(m_species_names[1]);
@@ -200,6 +201,7 @@ public:
 
     /** Perform all binary collisions within a tile
      *
+     * \param[in] dt time step size
      * \param[in] lev the mesh-refinement level
      * \param[in] mfi iterator for multifab
      * \param species_1 first species container
